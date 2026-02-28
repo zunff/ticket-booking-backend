@@ -1,8 +1,7 @@
 package com.ticketbooking.ticket.mq;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketbooking.common.enums.OrderStatus;
-import com.ticketbooking.ticket.config.RabbitMQConfig;
+import com.ticketbooking.ticket.config.KafkaConfig;
 import com.ticketbooking.ticket.constant.RedisKeyConstants;
 import com.ticketbooking.ticket.entity.Order;
 import com.ticketbooking.ticket.mapper.OrderMapper;
@@ -10,11 +9,14 @@ import com.ticketbooking.ticket.mapper.TicketMapper;
 import com.ticketbooking.common.utils.RedisUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.handler.annotation.Header;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Duration;
 
 @Slf4j
 @Component
@@ -25,18 +27,17 @@ public class OrderMessageConsumer {
     private final TicketMapper ticketMapper;
     private final RedisUtils redisUtils;
     
-    @Qualifier("rabbitmqObjectMapper")
-    private final ObjectMapper objectMapper;
-    
-    @RabbitListener(queues = RabbitMQConfig.TICKET_ORDER_QUEUE)
+    @KafkaListener(topics = KafkaConfig.TICKET_ORDER_TOPIC, groupId = "ticket-order-group")
     @Transactional
-    public void processOrder(Message message) {
+    public void processOrder(@Payload TicketOrderMessage message,
+                             @Header(KafkaHeaders.RECEIVED_KEY) String key,
+                             Acknowledgment acknowledgment) {
         try {
-            TicketOrderMessage orderMessage = objectMapper.readValue(message.getBody(), TicketOrderMessage.class);
-            processOrderInternal(orderMessage);
+            processOrderInternal(message);
+            acknowledgment.acknowledge();
         } catch (Exception e) {
-            log.error("Error processing order message", e);
-            throw new RuntimeException(e);
+            log.error("Error processing order message: {}", message.getOrderNo(), e);
+            acknowledgment.nack(Duration.ofSeconds(1));
         }
     }
     

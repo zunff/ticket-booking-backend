@@ -12,10 +12,8 @@ stringData:
   MYSQL_PASSWORD: root123
   REDIS_HOST: host.docker.internal
   REDIS_PORT: "6379"
-  RABBITMQ_HOST: host.docker.internal
-  RABBITMQ_PORT: "5672"
-  RABBITMQ_USER: guest
-  RABBITMQ_PASSWORD: guest
+  KAFKA_HOST: host.docker.internal
+  KAFKA_PORT: "9093"
   SPRING_PROFILES_ACTIVE: prod
 ---
 apiVersion: apps/v1

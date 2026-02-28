@@ -24,16 +24,26 @@ spring:
           max-active: 20
           max-idle: 10
           min-idle: 5
-  rabbitmq:
-    host: localhost
-    port: 5672
-    username: guest
-    password: guest
+  kafka:
+    bootstrap-servers: localhost:9093
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      acks: all
+      retries: 3
+      batch-size: 16384
+      buffer-memory: 33554432
+    consumer:
+      group-id: ticket-order-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 10
+      properties:
+        spring.json.trusted.packages: "com.ticketbooking.ticket.mq"
     listener:
-      simple:
-        concurrency: 5
-        max-concurrency: 10
-        prefetch: 5
+      concurrency: 5
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

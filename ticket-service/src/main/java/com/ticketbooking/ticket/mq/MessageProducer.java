@@ -1,13 +1,9 @@
 package com.ticketbooking.ticket.mq;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ticketbooking.ticket.config.RabbitMQConfig;
+import com.ticketbooking.ticket.config.KafkaConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageProperties;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -15,27 +11,18 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class MessageProducer {
     
-    private final RabbitTemplate rabbitTemplate;
-    
-    @Qualifier("rabbitmqObjectMapper")
-    private final ObjectMapper objectMapper;
+    private final KafkaTemplate<String, TicketOrderMessage> kafkaTemplate;
     
     public void sendOrderMessage(TicketOrderMessage ticketOrderMessage) {
         try {
-            String json = objectMapper.writeValueAsString(ticketOrderMessage);
-            
-            MessageProperties props = new MessageProperties();
-            props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-            props.setContentEncoding("UTF-8");
-            props.setHeader("__TypeId__", TicketOrderMessage.class.getName());
-            
-            Message message = new Message(json.getBytes(java.nio.charset.StandardCharsets.UTF_8), props);
-            
-            rabbitTemplate.send(
-                    RabbitMQConfig.TICKET_ORDER_EXCHANGE,
-                    RabbitMQConfig.TICKET_ORDER_ROUTING_KEY,
-                    message
-            );
+            kafkaTemplate.send(KafkaConfig.TICKET_ORDER_TOPIC, ticketOrderMessage.getOrderNo(), ticketOrderMessage)
+                    .whenComplete((result, ex) -> {
+                        if (ex != null) {
+                            log.error("Failed to send order message: {}", ticketOrderMessage.getOrderNo(), ex);
+                        } else {
+                            log.debug("Sent order message: {}", ticketOrderMessage.getOrderNo());
+                        }
+                    });
         } catch (Exception e) {
             log.error("Failed to send order message: {}", ticketOrderMessage.getOrderNo(), e);
         }
