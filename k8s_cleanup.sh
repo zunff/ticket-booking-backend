@@ -1,22 +1,19 @@
 #!/bin/bash
 
 echo "=========================================="
-echo "Stopping services and cleaning up..."
+echo "Stopping K8s services and cleaning up..."
 echo "=========================================="
 
 echo ""
 echo "1. Deleting Kubernetes resources..."
 kubectl delete -f k8s/ticket-service.yaml --ignore-not-found
 kubectl delete -f k8s/user-service.yaml --ignore-not-found
-kubectl delete -f k8s/rabbitmq.yaml --ignore-not-found
-kubectl delete -f k8s/redis.yaml --ignore-not-found
-kubectl delete -f k8s/mysql.yaml --ignore-not-found
-kubectl delete secret app-secret --ignore-not-found
+kubectl delete namespace ticket-booking --ignore-not-found
 
 echo ""
 echo "2. Waiting for pods to terminate..."
 sleep 5
-kubectl get pods
+kubectl get pods -n ticket-booking 2>/dev/null || echo "Namespace ticket-booking deleted"
 
 echo ""
 echo "3. Removing Docker images..."

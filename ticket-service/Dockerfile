@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 COPY pom.xml .
 COPY ticket-booking-common/pom.xml ticket-booking-common/
@@ -12,7 +12,7 @@ RUN mvn -pl ticket-booking-common -am clean install -DskipTests
 COPY ticket-service ticket-service
 RUN mvn -pl ticket-service -am clean package -DskipTests -Dmaven.compiler.parameters=true
 
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY --from=build /build/ticket-service/target/*.jar app.jar
 EXPOSE 8080

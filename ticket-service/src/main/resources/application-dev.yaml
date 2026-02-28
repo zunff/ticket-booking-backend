@@ -34,12 +34,6 @@ spring:
         concurrency: 5
         max-concurrency: 10
         prefetch: 5
-  cloud:
-    sentinel:
-      eager: false
-      transport:
-        dashboard: localhost:8080
-      enabled: true
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
