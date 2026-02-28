@@ -1,6 +1,8 @@
 package com.ticketbooking.user.controller;
 
 import com.ticketbooking.common.result.Result;
+import com.ticketbooking.user.dto.LoginRequest;
+import com.ticketbooking.user.dto.LoginResponse;
 import com.ticketbooking.user.entity.User;
 import com.ticketbooking.user.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,28 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
     
     private final UserService userService;
+    
+    @PostMapping("/login")
+    public Result<LoginResponse> login(@RequestBody LoginRequest request) {
+        try {
+            LoginResponse response = userService.login(request);
+            response.getUser().setPassword(null);
+            return Result.success("登录成功", response);
+        } catch (RuntimeException e) {
+            return Result.error(1001, e.getMessage());
+        }
+    }
+    
+    @PostMapping("/register")
+    public Result<User> register(@RequestBody User user) {
+        try {
+            User registeredUser = userService.register(user);
+            registeredUser.setPassword(null);
+            return Result.success("注册成功", registeredUser);
+        } catch (RuntimeException e) {
+            return Result.error(1002, e.getMessage());
+        }
+    }
     
     @GetMapping("/{id}")
     public Result<User> getUser(@PathVariable Long id) {
