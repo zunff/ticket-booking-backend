@@ -1,0 +1,9 @@
+server:
+  servlet:
+    context-path: /api
+
+spring:
+  application:
+    name: user-service
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:prod}
