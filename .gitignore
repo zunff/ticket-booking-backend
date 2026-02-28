@@ -5,3 +5,6 @@ target/
 *.class
 .DS_Store
 test_results_*.json
+
+.agents
+.claude
