@@ -8,14 +8,5 @@ import java.util.List;
 
 @Mapper
 public interface OrderMapper extends BaseMapper<Order> {
-    
-    default List<Order> findByUserId(Long userId) {
-        return selectList(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Order>()
-                .eq(Order::getUserId, userId));
-    }
-    
-    default Order findByOrderNo(String orderNo) {
-        return selectOne(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<Order>()
-                .eq(Order::getOrderNo, orderNo));
-    }
+
 }

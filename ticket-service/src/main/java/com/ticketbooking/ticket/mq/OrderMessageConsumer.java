@@ -3,9 +3,8 @@ package com.ticketbooking.ticket.mq;
 import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.ticket.config.KafkaConfig;
 import com.ticketbooking.ticket.constant.RedisKeyConstants;
-import com.ticketbooking.ticket.entity.Order;
-import com.ticketbooking.ticket.mapper.OrderMapper;
 import com.ticketbooking.ticket.mapper.TicketMapper;
+import com.ticketbooking.ticket.service.OrderService;
 import com.ticketbooking.common.utils.RedisUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,8 +21,8 @@ import java.time.Duration;
 @Component
 @RequiredArgsConstructor
 public class OrderMessageConsumer {
-    
-    private final OrderMapper orderMapper;
+
+    private final OrderService orderService;
     private final TicketMapper ticketMapper;
     private final RedisUtils redisUtils;
     
@@ -42,25 +41,33 @@ public class OrderMessageConsumer {
     }
     
     private void processOrderInternal(TicketOrderMessage message) {
-        if (orderMapper.findByOrderNo(message.getOrderNo()) != null) {
+        if (orderService.findByOrderNo(message.getOrderNo()) != null) {
             return;
         }
-        
+
         int updated = ticketMapper.decrementStock(message.getTicketId(), message.getQuantity());
-        
+
         if (updated == 0) {
+            orderService.createOrder(
+                    message.getOrderNo(),
+                    message.getUserId(),
+                    message.getTicketId(),
+                    message.getQuantity(),
+                    message.getTotalPrice(),
+                    OrderStatus.FAILED.getCode()
+            );
             rollbackRedis(message.getTicketId(), message.getUserId());
             return;
         }
-        
-        Order order = new Order();
-        order.setOrderNo(message.getOrderNo());
-        order.setTicketId(message.getTicketId());
-        order.setUserId(message.getUserId());
-        order.setQuantity(message.getQuantity());
-        order.setTotalPrice(message.getTotalPrice());
-        order.setStatus(OrderStatus.PAID.getCode());
-        orderMapper.insert(order);
+
+        orderService.createOrder(
+                message.getOrderNo(),
+                message.getUserId(),
+                message.getTicketId(),
+                message.getQuantity(),
+                message.getTotalPrice(),
+                OrderStatus.PAID.getCode()
+        );
     }
     
     private void rollbackRedis(Long ticketId, Long userId) {
