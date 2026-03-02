@@ -8,6 +8,7 @@ import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.enums.TicketStatus;
 import com.ticketbooking.common.exception.BusinessException;
+import com.ticketbooking.common.utils.RedisLock;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.ticket.constant.RedisKeyConstants;
 import com.ticketbooking.ticket.entity.Order;
@@ -28,7 +29,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 @RequiredArgsConstructor
@@ -37,10 +37,9 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> impleme
     private static final DateTimeFormatter ORDER_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final String NULL_STOCK_PLACEHOLDER = "NULL";
     private static final long CACHE_NULL_EXPIRE_SECONDS = 60;
-    
-    private final ReentrantLock stockInitLock = new ReentrantLock();
-    
+
     private final RedisUtils redisUtils;
+    private final RedisLock redisLock;
     private final OrderMapper orderMapper;
     private final MessageProducer messageProducer;
     private final TicketBookingLuaScript luaScript;
@@ -112,9 +111,17 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> impleme
             }
             return;
         }
-        
-        stockInitLock.lock();
+
+        String lockKey = RedisKeyConstants.buildTicketLockKey(ticketId);
+        String requestId = UUID.randomUUID().toString();
+
+        boolean locked = redisLock.tryLock(lockKey, requestId, 10, java.util.concurrent.TimeUnit.SECONDS);
+        if (!locked) {
+            throw new BusinessException(ErrorCode.SYSTEM_BUSY);
+        }
+
         try {
+            // 双检：再次检查缓存
             stock = redisUtils.get(stockKey);
             if (stock != null) {
                 if (NULL_STOCK_PLACEHOLDER.equals(stock)) {
@@ -122,16 +129,16 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> impleme
                 }
                 return;
             }
-            
+
             Ticket ticket = getById(ticketId);
             if (ticket == null) {
                 redisUtils.setEx(stockKey, NULL_STOCK_PLACEHOLDER, CACHE_NULL_EXPIRE_SECONDS);
                 throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
             }
-            
+
             redisUtils.set(stockKey, String.valueOf(ticket.getAvailableStock()));
         } finally {
-            stockInitLock.unlock();
+            redisLock.unlock(lockKey, requestId);
         }
     }
     
