@@ -43,7 +43,7 @@ spring:
       properties:
         spring.json.trusted.packages: "com.ticketbooking.ticket.mq"
     listener:
-      concurrency: 5
+      concurrency: 1
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

@@ -1,7 +1,7 @@
 package com.ticketbooking.ticket.mq;
 
 import com.ticketbooking.common.enums.OrderStatus;
-import com.ticketbooking.ticket.config.KafkaConfig;
+import com.ticketbooking.ticket.config.KafkaTopicConfig;
 import com.ticketbooking.ticket.constant.RedisKeyConstants;
 import com.ticketbooking.ticket.mapper.TicketMapper;
 import com.ticketbooking.ticket.service.OrderService;
@@ -26,7 +26,7 @@ public class OrderMessageConsumer {
     private final TicketMapper ticketMapper;
     private final RedisUtils redisUtils;
     
-    @KafkaListener(topics = KafkaConfig.TICKET_ORDER_TOPIC, groupId = "ticket-order-group")
+    @KafkaListener(topics = KafkaTopicConfig.TICKET_ORDER_TOPIC, groupId = "ticket-order-group", concurrency = "5")
     @Transactional
     public void processOrder(@Payload TicketOrderMessage message,
                              @Header(KafkaHeaders.RECEIVED_KEY) String key,

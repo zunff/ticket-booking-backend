@@ -1,11 +1,9 @@
 package com.ticketbooking.ticket.service.impl;
 
 import com.alibaba.csp.sentinel.annotation.SentinelResource;
-import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.enums.ErrorCode;
-import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.enums.TicketStatus;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.utils.RedisLock;
@@ -16,7 +14,7 @@ import com.ticketbooking.ticket.entity.Ticket;
 import com.ticketbooking.ticket.lua.TicketBookingLuaScript;
 import com.ticketbooking.ticket.mapper.OrderMapper;
 import com.ticketbooking.ticket.mapper.TicketMapper;
-import com.ticketbooking.ticket.mq.MessageProducer;
+import com.ticketbooking.ticket.mq.OrderMessageProducer;
 import com.ticketbooking.ticket.mq.TicketOrderMessage;
 import com.ticketbooking.ticket.service.TicketService;
 import lombok.RequiredArgsConstructor;
@@ -41,7 +39,7 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> impleme
     private final RedisUtils redisUtils;
     private final RedisLock redisLock;
     private final OrderMapper orderMapper;
-    private final MessageProducer messageProducer;
+    private final OrderMessageProducer orderMessageProducer;
     private final TicketBookingLuaScript luaScript;
     
     @Override
@@ -152,7 +150,7 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> impleme
         BigDecimal totalPrice = ticket.getPrice().multiply(new BigDecimal(quantity));
         
         TicketOrderMessage message = new TicketOrderMessage(orderNo, userId, ticketId, quantity, totalPrice);
-        messageProducer.sendOrderMessage(message);
+        orderMessageProducer.sendOrderMessage(message);
         
         return orderNo;
     }
