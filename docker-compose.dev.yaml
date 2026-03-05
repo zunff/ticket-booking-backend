@@ -37,6 +37,30 @@ services:
     networks:
       - ticket-network
 
+  nacos:
+    image: nacos/nacos-server:v2.3.0
+    container_name: ticket-nacos
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_DB_NAME: nacos_config
+      MYSQL_SERVICE_USER: root
+      MYSQL_SERVICE_PASSWORD: root123
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    volumes:
+      - nacos_data:/home/nacos/logs
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - ticket-network
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: ticket-zookeeper
@@ -84,6 +108,7 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  nacos_data:
   zookeeper_data:
   zookeeper_logs:
   kafka_data:

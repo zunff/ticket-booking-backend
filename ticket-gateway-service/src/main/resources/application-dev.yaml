@@ -1,0 +1,87 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: ticket-gateway-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: dev
+        group: ticket-booking
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: ticket-user-service
+          uri: lb://ticket-user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=1
+        
+        - id: ticket-service
+          uri: lb://ticket-service
+          predicates:
+            - Path=/api/tickets/**
+          filters:
+            - StripPrefix=1
+        
+        - id: ticket-order-service
+          uri: lb://ticket-order-service
+          predicates:
+            - Path=/api/orders/**
+          filters:
+            - StripPrefix=1
+        
+        - id: ticket-stock-service
+          uri: lb://ticket-stock-service
+          predicates:
+            - Path=/api/stock/**
+          filters:
+            - StripPrefix=1
+        
+        - id: admin-ticket-user-service
+          uri: lb://ticket-user-service
+          predicates:
+            - Path=/api/admin/users/**
+          filters:
+            - StripPrefix=2
+        
+        - id: admin-ticket-service
+          uri: lb://ticket-service
+          predicates:
+            - Path=/api/admin/tickets/**
+          filters:
+            - StripPrefix=2
+        
+        - id: admin-ticket-order-service
+          uri: lb://ticket-order-service
+          predicates:
+            - Path=/api/admin/orders/**
+          filters:
+            - StripPrefix=2
+        
+        - id: admin-ticket-stock-service
+          uri: lb://ticket-stock-service
+          predicates:
+            - Path=/api/admin/stock/**
+          filters:
+            - StripPrefix=2
+
+jwt:
+  secret: ticket-booking-jwt-secret-key-for-demo-purpose-only
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+
+logging:
+  level:
+    com.ticketbooking: INFO
+    org.springframework.cloud.gateway: DEBUG

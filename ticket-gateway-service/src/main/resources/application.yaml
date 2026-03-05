@@ -1,0 +1,19 @@
+server:
+  port: 9000
+
+spring:
+  application:
+    name: ticket-gateway-service
+
+jwt:
+  secret: ticket-booking-jwt-secret-key-for-demo-purpose-only
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+
+logging:
+  level:
+    com.ticketbooking: INFO

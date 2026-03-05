@@ -1,46 +1,29 @@
 package com.ticketbooking.ticket.service.impl;
 
-import com.alibaba.csp.sentinel.annotation.SentinelResource;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.TicketStatus;
 import com.ticketbooking.common.exception.BusinessException;
-import com.ticketbooking.common.utils.RedisLock;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.ticket.constant.RedisKeyConstants;
-import com.ticketbooking.ticket.entity.Order;
 import com.ticketbooking.ticket.entity.Ticket;
-import com.ticketbooking.ticket.lua.TicketBookingLuaScript;
-import com.ticketbooking.ticket.mapper.OrderMapper;
 import com.ticketbooking.ticket.mapper.TicketMapper;
-import com.ticketbooking.ticket.mq.OrderMessageProducer;
-import com.ticketbooking.ticket.mq.TicketOrderMessage;
 import com.ticketbooking.ticket.service.TicketService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> implements TicketService {
     
-    private static final DateTimeFormatter ORDER_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-    private static final String NULL_STOCK_PLACEHOLDER = "NULL";
-    private static final long CACHE_NULL_EXPIRE_SECONDS = 60;
-
     private final RedisUtils redisUtils;
-    private final RedisLock redisLock;
-    private final OrderMapper orderMapper;
-    private final OrderMessageProducer orderMessageProducer;
-    private final TicketBookingLuaScript luaScript;
+    private static final long CACHE_EXPIRE_SECONDS = 3600;
     
     @Override
     public Ticket createTicket(Ticket ticket) {
@@ -51,6 +34,30 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> impleme
         String stockKey = RedisKeyConstants.buildTicketStockKey(ticket.getId());
         redisUtils.set(stockKey, String.valueOf(ticket.getTotalStock()));
         
+        cacheTicketInfo(ticket);
+        
+        log.info("Ticket created: id={}, name={}, stock={}", 
+                ticket.getId(), ticket.getName(), ticket.getTotalStock());
+        
+        return ticket;
+    }
+    
+    @Override
+    public Ticket updateTicket(Ticket ticket) {
+        Ticket existing = getById(ticket.getId());
+        if (existing == null) {
+            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
+        }
+        
+        updateById(ticket);
+        cacheTicketInfo(ticket);
+        
+        if (ticket.getAvailableStock() != null) {
+            String stockKey = RedisKeyConstants.buildTicketStockKey(ticket.getId());
+            redisUtils.set(stockKey, String.valueOf(ticket.getAvailableStock()));
+        }
+        
+        log.info("Ticket updated: id={}", ticket.getId());
         return ticket;
     }
     
@@ -68,108 +75,115 @@ public class TicketServiceImpl extends ServiceImpl<TicketMapper, Ticket> impleme
     
     @Override
     public Ticket getTicketById(Long id) {
-        return getById(id);
+        String cacheKey = "ticket:info:" + id;
+        String cachedInfo = redisUtils.get(cacheKey);
+        if (cachedInfo != null) {
+            return parseTicketFromCache(cachedInfo);
+        }
+        
+        Ticket ticket = getById(id);
+        if (ticket != null) {
+            cacheTicketInfo(ticket);
+        }
+        
+        return ticket;
     }
     
     @Override
-    @SentinelResource(value = "bookTicket", blockHandler = "handleBookTicketBlock")
-    public String bookTicket(Long ticketId, Long userId, Integer quantity) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(ticketId, userId);
-        
-        initStockWithDoubleCheck(ticketId, stockKey);
-        
-        DefaultRedisScript<Long> script = luaScript.getBookingScript();
-        List<String> keys = Arrays.asList(stockKey, userTicketKey);
-        Long result = redisUtils.executeLuaScript(script, keys, String.valueOf(userId), String.valueOf(quantity));
-        
-        if (result == null) {
-            throw new BusinessException(ErrorCode.SYSTEM_BUSY);
-        }
-        
-        switch (result.intValue()) {
-            case -1:
-                throw new BusinessException(ErrorCode.ALREADY_BOUGHT);
-            case -2:
-                throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-            case -3:
-                throw new BusinessException(ErrorCode.TICKET_SOLD_OUT);
-            case 1:
-                return processOrderAsync(ticketId, userId, quantity);
-            default:
-                throw new BusinessException(ErrorCode.SYSTEM_BUSY);
-        }
-    }
-    
-    private void initStockWithDoubleCheck(Long ticketId, String stockKey) {
-        String stock = redisUtils.get(stockKey);
-        if (stock != null) {
-            if (NULL_STOCK_PLACEHOLDER.equals(stock)) {
-                throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-            }
-            return;
-        }
-
-        String lockKey = RedisKeyConstants.buildTicketLockKey(ticketId);
-        String requestId = UUID.randomUUID().toString();
-
-        boolean locked = redisLock.tryLock(lockKey, requestId, 10, java.util.concurrent.TimeUnit.SECONDS);
-        if (!locked) {
-            throw new BusinessException(ErrorCode.SYSTEM_BUSY);
-        }
-
-        try {
-            // 双检：再次检查缓存
-            stock = redisUtils.get(stockKey);
-            if (stock != null) {
-                if (NULL_STOCK_PLACEHOLDER.equals(stock)) {
-                    throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-                }
-                return;
-            }
-
-            Ticket ticket = getById(ticketId);
-            if (ticket == null) {
-                redisUtils.setEx(stockKey, NULL_STOCK_PLACEHOLDER, CACHE_NULL_EXPIRE_SECONDS);
-                throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-            }
-
-            redisUtils.set(stockKey, String.valueOf(ticket.getAvailableStock()));
-        } finally {
-            redisLock.unlock(lockKey, requestId);
-        }
-    }
-    
-    private String processOrderAsync(Long ticketId, Long userId, Integer quantity) {
+    public void startSale(Long ticketId) {
         Ticket ticket = getById(ticketId);
         if (ticket == null) {
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
         
-        String orderNo = generateOrderNo();
-        BigDecimal totalPrice = ticket.getPrice().multiply(new BigDecimal(quantity));
+        ticket.setStatus(TicketStatus.AVAILABLE.getCode());
+        updateById(ticket);
         
-        TicketOrderMessage message = new TicketOrderMessage(orderNo, userId, ticketId, quantity, totalPrice);
-        orderMessageProducer.sendOrderMessage(message);
+        syncStockToRedis(ticketId);
+        cacheTicketInfo(ticket);
         
-        return orderNo;
+        log.info("Ticket sale started: id={}", ticketId);
     }
     
     @Override
-    public Order getOrderByOrderNo(String orderNo) {
-        return orderMapper.selectOne(new LambdaQueryWrapper<Order>()
-                .eq(Order::getOrderNo, orderNo));
+    public void stopSale(Long ticketId) {
+        Ticket ticket = getById(ticketId);
+        if (ticket == null) {
+            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
+        }
+        
+        ticket.setStatus(TicketStatus.SUSPENDED.getCode());
+        updateById(ticket);
+        
+        cacheTicketInfo(ticket);
+        
+        log.info("Ticket sale stopped: id={}", ticketId);
     }
     
     @Override
-    public List<Order> getOrdersByUserId(Long userId) {
-        return orderMapper.selectList(new LambdaQueryWrapper<Order>()
-                .eq(Order::getUserId, userId)
-                .orderByDesc(Order::getCreateTime));
+    public void deleteTicket(Long ticketId) {
+        removeById(ticketId);
+        
+        String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
+        redisUtils.delete(stockKey);
+        redisUtils.delete("ticket:info:" + ticketId);
+        
+        log.info("Ticket deleted: id={}", ticketId);
     }
     
-    private String generateOrderNo() {
-        return LocalDateTime.now().format(ORDER_NO_FORMATTER) 
-                + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    @Override
+    public void syncStockToRedis(Long ticketId) {
+        Ticket ticket = getById(ticketId);
+        if (ticket != null) {
+            String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
+            redisUtils.set(stockKey, String.valueOf(ticket.getAvailableStock()));
+            log.info("Stock synced to Redis: ticketId={}, stock={}", ticketId, ticket.getAvailableStock());
+        }
+    }
+    
+    private void cacheTicketInfo(Ticket ticket) {
+        String cacheKey = "ticket:info:" + ticket.getId();
+        String cacheValue = ticket.getId() + ":" + ticket.getName() + ":" + 
+                ticket.getPrice() + ":" + ticket.getAvailableStock();
+        redisUtils.setEx(cacheKey, cacheValue, CACHE_EXPIRE_SECONDS);
+    }
+    
+    private Ticket parseTicketFromCache(String cachedInfo) {
+        if (cachedInfo == null || cachedInfo.isEmpty()) {
+            return null;
+        }
+        String[] parts = cachedInfo.split(":");
+        if (parts.length >= 4) {
+            Ticket ticket = new Ticket();
+            ticket.setId(Long.parseLong(parts[0]));
+            ticket.setName(parts[1]);
+            ticket.setPrice(new java.math.BigDecimal(parts[2]));
+            ticket.setAvailableStock(Integer.parseInt(parts[3]));
+            return ticket;
+        }
+        return null;
+    }
+    
+    @Scheduled(fixedRate = 600000)
+    public void preloadHotTickets() {
+        log.info("Preloading hot tickets to cache...");
+        
+        List<Ticket> hotTickets = list(new LambdaQueryWrapper<Ticket>()
+                .eq(Ticket::getStatus, TicketStatus.AVAILABLE.getCode())
+                .gt(Ticket::getAvailableStock, 0)
+                .last("LIMIT 10"));
+        
+        for (Ticket ticket : hotTickets) {
+            String stockKey = RedisKeyConstants.buildTicketStockKey(ticket.getId());
+            String cachedStock = redisUtils.get(stockKey);
+            
+            if (cachedStock == null) {
+                redisUtils.set(stockKey, String.valueOf(ticket.getAvailableStock()));
+                log.info("Preloaded stock for ticket: id={}, stock={}", 
+                        ticket.getId(), ticket.getAvailableStock());
+            }
+            
+            cacheTicketInfo(ticket);
+        }
     }
 }

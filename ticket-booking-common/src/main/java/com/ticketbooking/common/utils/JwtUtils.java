@@ -18,9 +18,14 @@ public class JwtUtils {
     private static final long EXPIRATION = 24 * 60 * 60 * 1000L;
     
     public String generateToken(Long userId, String username) {
+        return generateToken(userId, username, false);
+    }
+    
+    public String generateToken(Long userId, String username, Boolean isAdmin) {
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("username", username);
+        claims.put("isAdmin", isAdmin != null && isAdmin);
         return Jwts.builder()
                 .claims(claims)
                 .subject(String.valueOf(userId))
@@ -52,6 +57,11 @@ public class JwtUtils {
     public String getUsername(String token) {
         Claims claims = parseToken(token);
         return claims.get("username", String.class);
+    }
+    
+    public Boolean getIsAdmin(String token) {
+        Claims claims = parseToken(token);
+        return claims.get("isAdmin", Boolean.class);
     }
     
     public boolean validateToken(String token) {

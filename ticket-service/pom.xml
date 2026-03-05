@@ -12,12 +12,17 @@
     
     <artifactId>ticket-service</artifactId>
     <name>ticket-service</name>
-    <description>Ticket service module</description>
+    <description>Ticket service - manages ticket info and sessions</description>
     
     <dependencies>
         <dependency>
             <groupId>com.ticketbooking</groupId>
             <artifactId>ticket-booking-common</artifactId>
+        </dependency>
+        
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
         
         <dependency>
@@ -36,11 +41,6 @@
         </dependency>
         
         <dependency>
-            <groupId>org.springframework.kafka</groupId>
-            <artifactId>spring-kafka</artifactId>
-        </dependency>
-        
-        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
@@ -49,11 +49,6 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
-        </dependency>
-        
-        <dependency>
-            <groupId>com.alibaba.cloud</groupId>
-            <artifactId>spring-cloud-starter-alibaba-sentinel</artifactId>
         </dependency>
     </dependencies>
     
