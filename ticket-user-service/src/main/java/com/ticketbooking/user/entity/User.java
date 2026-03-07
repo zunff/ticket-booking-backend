@@ -22,7 +22,7 @@ public class User {
     
     private String phone;
     
-    private String status;
+    private Integer status;
     
     private Boolean isAdmin;
     

@@ -15,15 +15,21 @@ public class StockController {
     
     private final StockService stockService;
     
-    @GetMapping("/{ticketId}")
-    public Result<Integer> getStock(@PathVariable Long ticketId) {
-        Integer stock = stockService.getAvailableStock(ticketId);
-        return stock != null ? Result.success(stock) : Result.error(2001, "票务不存在");
+    @GetMapping("/{concertId}/{gradeId}")
+    public Result<Integer> getStock(@PathVariable Long concertId, @PathVariable Long gradeId) {
+        Integer stock = stockService.getAvailableStock(concertId, gradeId);
+        return stock != null ? Result.success(stock) : Result.error(2001, "库存不存在");
     }
     
-    @PostMapping("/sync/{ticketId}")
-    public Result<String> syncStock(@PathVariable Long ticketId) {
-        stockService.syncStockToRedis(ticketId);
+    @PostMapping("/sync/{concertId}/{gradeId}")
+    public Result<String> syncStock(@PathVariable Long concertId, @PathVariable Long gradeId) {
+        stockService.syncStockToRedis(concertId, gradeId);
         return Result.success("库存同步成功");
+    }
+    
+    @GetMapping("/logs/{concertId}/{gradeId}")
+    public Result<List<StockLog>> getStockLogs(@PathVariable Long concertId, @PathVariable Long gradeId) {
+        List<StockLog> logs = stockService.getStockLogs(concertId, gradeId);
+        return Result.success(logs);
     }
 }

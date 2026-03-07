@@ -1,16 +1,22 @@
 package com.ticketbooking.stock.client;
 
-import com.ticketbooking.stock.model.dto.TicketDTO;
+import com.ticketbooking.stock.model.dto.ConcertDTO;
+import com.ticketbooking.stock.model.dto.TicketGradeDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 
+import java.util.List;
+
 @FeignClient(name = "ticket-service", path = "/api")
 public interface TicketServiceClient {
     
-    @GetMapping("/tickets/{id}")
-    TicketDTO getTicketById(@PathVariable("id") Long id);
+    @GetMapping("/concerts/{id}")
+    ConcertDTO getConcertById(@PathVariable("id") Long id);
     
-    @GetMapping("/tickets/{id}/stock")
-    Integer getAvailableStock(@PathVariable("id") Long ticketId);
+    @GetMapping("/concerts/{concertId}/grades")
+    List<TicketGradeDTO> getGradesByConcertId(@PathVariable("concertId") Long concertId);
+    
+    @GetMapping("/grades/{gradeId}")
+    TicketGradeDTO getGradeById(@PathVariable("gradeId") Long gradeId);
 }

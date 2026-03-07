@@ -2,23 +2,22 @@ package com.ticketbooking.order.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
+import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.order.config.BookingLuaScript;
-import com.ticketbooking.order.constant.RedisKeyConstants;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
 import com.ticketbooking.order.entity.Order;
 import com.ticketbooking.order.mapper.OrderMapper;
 import com.ticketbooking.order.mq.OrderMessageProducer;
-import com.ticketbooking.order.mq.TicketOrderMessage;
 import com.ticketbooking.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
@@ -38,14 +37,19 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private final BookingLuaScript bookingLuaScript;
     
     @Override
-    public String createOrder(Long userId, Long ticketId, Integer quantity) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(ticketId, userId);
+    public String createOrder(Long userId, Long concertId, Long gradeId, Integer quantity) {
+        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
+        String userTicketKey = RedisKeyConstants.buildUserTicketKey(concertId, gradeId, userId);
+        
+        log.info("Creating order: userId={}, concertId={}, gradeId={}, quantity={}, stockKey={}, userTicketKey={}", 
+                userId, concertId, gradeId, quantity, stockKey, userTicketKey);
         
         DefaultRedisScript<Long> script = bookingLuaScript.getBookingScript();
         List<String> keys = Arrays.asList(stockKey, userTicketKey);
         Long result = redisUtils.executeLuaScript(script, keys, 
                 String.valueOf(userId), String.valueOf(quantity));
+        
+        log.info("Lua script result: {}", result);
         
         if (result == null) {
             throw new BusinessException(ErrorCode.SYSTEM_BUSY);
@@ -59,38 +63,38 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             case -3:
                 throw new BusinessException(ErrorCode.TICKET_SOLD_OUT);
             case 1:
-                return processOrderAsync(userId, ticketId, quantity);
+                return processOrderAsync(userId, concertId, gradeId, quantity);
             default:
                 throw new BusinessException(ErrorCode.SYSTEM_BUSY);
         }
     }
     
-    private String processOrderAsync(Long userId, Long ticketId, Integer quantity) {
-        TicketInfoDTO ticketInfo = getTicketInfo(ticketId);
+    private String processOrderAsync(Long userId, Long concertId, Long gradeId, Integer quantity) {
+        TicketInfoDTO ticketInfo = getTicketInfo(concertId, gradeId);
         if (ticketInfo == null) {
-            rollbackRedis(ticketId, userId, quantity);
+            rollbackRedis(concertId, gradeId, userId, quantity);
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
         
         String orderNo = generateOrderNo();
-        BigDecimal totalPrice = ticketInfo.getPrice().multiply(new BigDecimal(quantity));
+        Integer totalPrice = ticketInfo.getPrice() * quantity;
         
-        String idempotentKey = RedisKeyConstants.buildIdempotentKey(orderNo);
+        String idempotentKey = RedisKeyConstants.buildOrderIdempotentKey(orderNo);
         redisUtils.setEx(idempotentKey, "PROCESSING", IDEMPOTENT_EXPIRE_SECONDS);
         
         TicketOrderMessage message = new TicketOrderMessage(
-                orderNo, userId, ticketId, quantity, totalPrice);
+                orderNo, userId, concertId, gradeId, quantity, totalPrice);
         orderMessageProducer.sendOrderMessage(message);
         
-        log.info("Order created: orderNo={}, userId={}, ticketId={}, quantity={}", 
-                orderNo, userId, ticketId, quantity);
+        log.info("Order created: orderNo={}, userId={}, concertId={}, gradeId={}, quantity={}", 
+                orderNo, userId, concertId, gradeId, quantity);
         
         return orderNo;
     }
     
-    private void rollbackRedis(Long ticketId, Long userId, Integer quantity) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(ticketId, userId);
+    private void rollbackRedis(Long concertId, Long gradeId, Long userId, Integer quantity) {
+        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
+        String userTicketKey = RedisKeyConstants.buildUserTicketKey(concertId, gradeId, userId);
         redisUtils.increment(stockKey, quantity);
         redisUtils.delete(userTicketKey);
     }
@@ -109,8 +113,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
     
     @Override
-    public TicketInfoDTO getTicketInfo(Long ticketId) {
-        String cacheKey = "ticket:info:" + ticketId;
+    public TicketInfoDTO getTicketInfo(Long concertId, Long gradeId) {
+        String cacheKey = RedisKeyConstants.buildConcertInfoKey(concertId) + ":" + gradeId;
         String cachedInfo = redisUtils.get(cacheKey);
         if (cachedInfo != null) {
             return parseTicketInfo(cachedInfo);
@@ -119,18 +123,19 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
     
     @Override
-    public boolean checkUserBoughtTicket(Long ticketId, Long userId) {
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(ticketId, userId);
+    public boolean checkUserBoughtTicket(Long concertId, Long gradeId, Long userId) {
+        String userTicketKey = RedisKeyConstants.buildUserTicketKey(concertId, gradeId, userId);
         return redisUtils.hasKey(userTicketKey);
     }
     
     @Override
-    public Order createOrderFromStock(String orderNo, Long userId, Long ticketId, 
-                                      Integer quantity, BigDecimal totalPrice, String status) {
+    public Order createOrderFromStock(String orderNo, Long userId, Long concertId, Long gradeId, 
+                                      Integer quantity, Integer totalPrice, Integer status) {
         Order order = new Order();
         order.setOrderNo(orderNo);
         order.setUserId(userId);
-        order.setTicketId(ticketId);
+        order.setConcertId(concertId);
+        order.setGradeId(gradeId);
         order.setQuantity(quantity);
         order.setTotalPrice(totalPrice);
         order.setStatus(status);
@@ -149,14 +154,20 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         if (cachedInfo == null || cachedInfo.isEmpty()) {
             return null;
         }
-        String[] parts = cachedInfo.split(":");
-        if (parts.length >= 4) {
-            return TicketInfoDTO.builder()
-                    .id(Long.parseLong(parts[0]))
-                    .name(parts[1])
-                    .price(new BigDecimal(parts[2]))
-                    .availableStock(Integer.parseInt(parts[3]))
-                    .build();
+        try {
+            String[] parts = cachedInfo.split(":");
+            if (parts.length >= 6) {
+                return TicketInfoDTO.builder()
+                        .concertId(Long.parseLong(parts[0]))
+                        .gradeId(Long.parseLong(parts[1]))
+                        .concertName(parts[2])
+                        .gradeName(parts[3])
+                        .price(Integer.parseInt(parts[4]))
+                        .availableStock(Integer.parseInt(parts[5]))
+                        .build();
+            }
+        } catch (Exception e) {
+            log.error("Failed to parse ticket info: {}", cachedInfo, e);
         }
         return null;
     }

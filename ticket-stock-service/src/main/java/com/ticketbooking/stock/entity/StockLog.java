@@ -14,7 +14,9 @@ public class StockLog {
     @TableId(type = IdType.AUTO)
     private Long id;
     
-    private Long ticketId;
+    private Long concertId;
+    
+    private Long gradeId;
     
     private String orderNo;
     

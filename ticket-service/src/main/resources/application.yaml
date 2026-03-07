@@ -3,7 +3,7 @@ server:
 
 spring:
   application:
-    name: ticket-ticket-service
+    name: ticket-service
   threads:
     virtual:
       enabled: true

@@ -7,8 +7,11 @@ import lombok.Data;
 @Data
 public class BookTicketQO {
     
-    @NotNull(message = "票务ID不能为空")
-    private Long ticketId;
+    @NotNull(message = "演唱会ID不能为空")
+    private Long concertId;
+    
+    @NotNull(message = "档位ID不能为空")
+    private Long gradeId;
     
     @Min(value = 1, message = "购买数量至少为1")
     private Integer quantity = 1;

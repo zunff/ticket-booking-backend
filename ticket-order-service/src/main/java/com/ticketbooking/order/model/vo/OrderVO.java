@@ -12,6 +12,6 @@ public class OrderVO {
     private Long ticketId;
     private Integer quantity;
     private BigDecimal totalPrice;
-    private String status;
+    private Integer status;
     private LocalDateTime createTime;
 }

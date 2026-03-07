@@ -1,24 +1,24 @@
 package com.ticketbooking.stock.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.ticketbooking.stock.entity.Stock;
 import com.ticketbooking.stock.entity.StockLog;
-import com.ticketbooking.stock.entity.Ticket;
 
 import java.util.List;
 
-public interface StockService extends IService<Ticket> {
+public interface StockService extends IService<Stock> {
     
-    int decrementStock(Long ticketId, Integer quantity, String orderNo);
+    int decrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo);
     
-    int incrementStock(Long ticketId, Integer quantity, String orderNo);
+    int incrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo);
     
-    Ticket getTicketById(Long ticketId);
+    Stock getStockByConcertAndGrade(Long concertId, Long gradeId);
     
-    Integer getAvailableStock(Long ticketId);
+    Integer getAvailableStock(Long concertId, Long gradeId);
     
-    void syncStockToRedis(Long ticketId);
+    void syncStockToRedis(Long concertId, Long gradeId);
     
-    List<StockLog> getStockLogs(Long ticketId);
+    List<StockLog> getStockLogs(Long concertId, Long gradeId);
     
-    void adjustStock(Long ticketId, Integer newStock, String remark);
+    void adjustStock(Long concertId, Long gradeId, Integer newStock, String remark);
 }

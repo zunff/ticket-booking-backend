@@ -2,12 +2,12 @@ package com.ticketbooking.stock.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.utils.RedisUtils;
-import com.ticketbooking.stock.constant.RedisKeyConstants;
+import com.ticketbooking.stock.entity.Stock;
 import com.ticketbooking.stock.entity.StockLog;
-import com.ticketbooking.stock.entity.Ticket;
 import com.ticketbooking.stock.mapper.StockLogMapper;
-import com.ticketbooking.stock.mapper.TicketMapper;
+import com.ticketbooking.stock.mapper.StockMapper;
 import com.ticketbooking.stock.service.StockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,7 +20,7 @@ import java.util.List;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class StockServiceImpl extends ServiceImpl<TicketMapper, Ticket> implements StockService {
+public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements StockService {
     
     private final StockLogMapper stockLogMapper;
     private final RedisUtils redisUtils;
@@ -28,30 +28,30 @@ public class StockServiceImpl extends ServiceImpl<TicketMapper, Ticket> implemen
     
     @Override
     @Transactional
-    public int decrementStock(Long ticketId, Integer quantity, String orderNo) {
-        Ticket ticket = getById(ticketId);
-        if (ticket == null) {
-            log.warn("Ticket not found: {}", ticketId);
+    public int decrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo) {
+        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
+        if (stock == null) {
+            log.warn("Stock not found: concertId={}, gradeId={}", concertId, gradeId);
             return 0;
         }
         
-        int beforeStock = ticket.getAvailableStock();
+        int beforeStock = stock.getAvailableStock();
         if (beforeStock < quantity) {
-            log.warn("Insufficient stock: ticketId={}, available={}, required={}", 
-                    ticketId, beforeStock, quantity);
+            log.warn("Insufficient stock: concertId={}, gradeId={}, available={}, required={}", 
+                    concertId, gradeId, beforeStock, quantity);
             return 0;
         }
         
-        int updated = baseMapper.decrementStock(ticketId, quantity);
+        int updated = baseMapper.decrementStock(concertId, gradeId, quantity, stock.getVersion());
         if (updated > 0) {
             int afterStock = beforeStock - quantity;
-            recordStockLog(ticketId, orderNo, -quantity, beforeStock, afterStock, "DECREMENT", "订单扣减库存");
+            recordStockLog(concertId, gradeId, orderNo, -quantity, beforeStock, afterStock, "DECREMENT", "订单扣减库存");
             
-            String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
+            String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
             redisUtils.set(stockKey, String.valueOf(afterStock));
             
-            log.info("Stock decremented: ticketId={}, quantity={}, before={}, after={}", 
-                    ticketId, quantity, beforeStock, afterStock);
+            log.info("Stock decremented: concertId={}, gradeId={}, quantity={}, before={}, after={}", 
+                    concertId, gradeId, quantity, beforeStock, afterStock);
         }
         
         return updated;
@@ -59,99 +59,102 @@ public class StockServiceImpl extends ServiceImpl<TicketMapper, Ticket> implemen
     
     @Override
     @Transactional
-    public int incrementStock(Long ticketId, Integer quantity, String orderNo) {
-        Ticket ticket = getById(ticketId);
-        if (ticket == null) {
-            log.warn("Ticket not found: {}", ticketId);
+    public int incrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo) {
+        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
+        if (stock == null) {
+            log.warn("Stock not found: concertId={}, gradeId={}", concertId, gradeId);
             return 0;
         }
         
-        int beforeStock = ticket.getAvailableStock();
+        int beforeStock = stock.getAvailableStock();
         
-        int updated = baseMapper.incrementStock(ticketId, quantity);
+        int updated = baseMapper.incrementStock(concertId, gradeId, quantity);
         if (updated > 0) {
             int afterStock = beforeStock + quantity;
-            recordStockLog(ticketId, orderNo, quantity, beforeStock, afterStock, "INCREMENT", "订单回滚库存");
+            recordStockLog(concertId, gradeId, orderNo, quantity, beforeStock, afterStock, "INCREMENT", "订单回滚库存");
             
-            String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
+            String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
             redisUtils.set(stockKey, String.valueOf(afterStock));
             
-            log.info("Stock incremented: ticketId={}, quantity={}, before={}, after={}", 
-                    ticketId, quantity, beforeStock, afterStock);
+            log.info("Stock incremented: concertId={}, gradeId={}, quantity={}, before={}, after={}", 
+                    concertId, gradeId, quantity, beforeStock, afterStock);
         }
         
         return updated;
     }
     
     @Override
-    public Ticket getTicketById(Long ticketId) {
-        return getById(ticketId);
+    public Stock getStockByConcertAndGrade(Long concertId, Long gradeId) {
+        return baseMapper.findByConcertAndGrade(concertId, gradeId);
     }
     
     @Override
-    public Integer getAvailableStock(Long ticketId) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
+    public Integer getAvailableStock(Long concertId, Long gradeId) {
+        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
         String cachedStock = redisUtils.get(stockKey);
         
         if (cachedStock != null) {
             return Integer.parseInt(cachedStock);
         }
         
-        Ticket ticket = getById(ticketId);
-        if (ticket != null) {
-            redisUtils.setEx(stockKey, String.valueOf(ticket.getAvailableStock()), CACHE_EXPIRE_SECONDS);
-            return ticket.getAvailableStock();
+        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
+        if (stock != null) {
+            redisUtils.setEx(stockKey, String.valueOf(stock.getAvailableStock()), CACHE_EXPIRE_SECONDS);
+            return stock.getAvailableStock();
         }
         
         return null;
     }
     
     @Override
-    public void syncStockToRedis(Long ticketId) {
-        Ticket ticket = getById(ticketId);
-        if (ticket != null) {
-            String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
-            redisUtils.set(stockKey, String.valueOf(ticket.getAvailableStock()));
-            log.info("Stock synced to Redis: ticketId={}, stock={}", ticketId, ticket.getAvailableStock());
+    public void syncStockToRedis(Long concertId, Long gradeId) {
+        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
+        if (stock != null) {
+            String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
+            redisUtils.set(stockKey, String.valueOf(stock.getAvailableStock()));
+            log.info("Stock synced to Redis: concertId={}, gradeId={}, stock={}", 
+                    concertId, gradeId, stock.getAvailableStock());
         }
     }
     
     @Override
-    public List<StockLog> getStockLogs(Long ticketId) {
+    public List<StockLog> getStockLogs(Long concertId, Long gradeId) {
         return stockLogMapper.selectList(
                 new LambdaQueryWrapper<StockLog>()
-                        .eq(StockLog::getTicketId, ticketId)
+                        .eq(StockLog::getConcertId, concertId)
+                        .eq(StockLog::getGradeId, gradeId)
                         .orderByDesc(StockLog::getCreateTime));
     }
     
     @Override
     @Transactional
-    public void adjustStock(Long ticketId, Integer newStock, String remark) {
-        Ticket ticket = getById(ticketId);
-        if (ticket == null) {
-            throw new RuntimeException("票务不存在");
+    public void adjustStock(Long concertId, Long gradeId, Integer newStock, String remark) {
+        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
+        if (stock == null) {
+            throw new RuntimeException("库存不存在");
         }
         
-        int beforeStock = ticket.getAvailableStock();
+        int beforeStock = stock.getAvailableStock();
         int changeAmount = newStock - beforeStock;
         
-        ticket.setAvailableStock(newStock);
-        updateById(ticket);
+        stock.setAvailableStock(newStock);
+        updateById(stock);
         
-        recordStockLog(ticketId, "ADMIN", changeAmount, beforeStock, newStock, "ADJUST", remark);
+        recordStockLog(concertId, gradeId, "ADMIN", changeAmount, beforeStock, newStock, "ADJUST", remark);
         
-        String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
+        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
         redisUtils.set(stockKey, String.valueOf(newStock));
         
-        log.info("Stock adjusted: ticketId={}, before={}, after={}, remark={}", 
-                ticketId, beforeStock, newStock, remark);
+        log.info("Stock adjusted: concertId={}, gradeId={}, before={}, after={}, remark={}", 
+                concertId, gradeId, beforeStock, newStock, remark);
     }
     
-    private void recordStockLog(Long ticketId, String orderNo, Integer changeAmount, 
+    private void recordStockLog(Long concertId, Long gradeId, String orderNo, Integer changeAmount, 
                                 Integer beforeStock, Integer afterStock, 
                                 String operationType, String remark) {
         StockLog stockLog = new StockLog();
-        stockLog.setTicketId(ticketId);
+        stockLog.setConcertId(concertId);
+        stockLog.setGradeId(gradeId);
         stockLog.setOrderNo(orderNo);
         stockLog.setChangeAmount(changeAmount);
         stockLog.setBeforeStock(beforeStock);

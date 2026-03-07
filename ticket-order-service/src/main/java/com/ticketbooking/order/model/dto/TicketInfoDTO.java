@@ -5,17 +5,16 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import java.math.BigDecimal;
-
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class TicketInfoDTO {
     
-    private Long id;
-    private String name;
-    private BigDecimal price;
+    private Long concertId;
+    private Long gradeId;
+    private String concertName;
+    private String gradeName;
+    private Integer price;
     private Integer availableStock;
-    private String status;
 }

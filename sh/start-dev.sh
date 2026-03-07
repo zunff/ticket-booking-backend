@@ -4,7 +4,8 @@ echo "=========================================="
 echo "  高并发抢票系统 - 本地开发环境启动脚本"
 echo "=========================================="
 
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_DIR"
 
 echo ""
@@ -19,7 +20,7 @@ echo "✅ 编译完成"
 echo ""
 echo "[2/4] 停止旧进程..."
 pkill -f "ticket-user-service-1.0.0.jar" 2>/dev/null
-pkill -f "ticket-ticket-service-1.0.0.jar" 2>/dev/null
+pkill -f "ticket-service-1.0.0.jar" 2>/dev/null
 pkill -f "ticket-order-service-1.0.0.jar" 2>/dev/null
 pkill -f "ticket-stock-service-1.0.0.jar" 2>/dev/null
 pkill -f "ticket-gateway-service-1.0.0.jar" 2>/dev/null
@@ -30,23 +31,23 @@ echo ""
 echo "[3/4] 启动微服务..."
 
 echo "  启动 ticket-user-service (端口: 8081)..."
-java -Xms128m -Xmx256m -jar user-service/target/ticket-user-service-1.0.0.jar --spring.profiles.active=dev > logs/user-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-user-service/target/ticket-user-service-1.0.0.jar --spring.profiles.active=dev > logs/user-service.log 2>&1 &
 sleep 3
 
-echo "  启动 ticket-ticket-service (端口: 8080)..."
-java -Xms128m -Xmx256m -jar ticket-service/target/ticket-ticket-service-1.0.0.jar --spring.profiles.active=dev > logs/ticket-service.log 2>&1 &
+echo "  启动 ticket-service (端口: 8080)..."
+java -Xms128m -Xmx256m -jar ticket-service/target/ticket-service-1.0.0.jar --spring.profiles.active=dev > logs/ticket-service.log 2>&1 &
 sleep 3
 
 echo "  启动 ticket-order-service (端口: 8082)..."
-java -Xms128m -Xmx256m -jar order-service/target/ticket-order-service-1.0.0.jar --spring.profiles.active=dev > logs/order-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-order-service/target/ticket-order-service-1.0.0.jar --spring.profiles.active=dev > logs/order-service.log 2>&1 &
 sleep 3
 
 echo "  启动 ticket-stock-service (端口: 8083)..."
-java -Xms128m -Xmx256m -jar stock-service/target/ticket-stock-service-1.0.0.jar --spring.profiles.active=dev > logs/stock-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-stock-service/target/ticket-stock-service-1.0.0.jar --spring.profiles.active=dev > logs/stock-service.log 2>&1 &
 sleep 3
 
 echo "  启动 ticket-gateway-service (端口: 9000)..."
-java -Xms128m -Xmx256m -jar gateway-service/target/ticket-gateway-service-1.0.0.jar --spring.profiles.active=dev > logs/gateway-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-gateway-service/target/ticket-gateway-service-1.0.0.jar --spring.profiles.active=dev > logs/gateway-service.log 2>&1 &
 sleep 3
 
 echo ""
@@ -61,7 +62,7 @@ echo ""
 echo "服务地址:"
 echo "  - ticket-gateway-service:    http://localhost:9000"
 echo "  - ticket-user-service:       http://localhost:8081"
-echo "  - ticket-ticket-service:     http://localhost:8080"
+echo "  - ticket-service:           http://localhost:8080"
 echo "  - ticket-order-service:      http://localhost:8082"
 echo "  - ticket-stock-service:      http://localhost:8083"
 echo ""
@@ -78,5 +79,5 @@ echo "  - 库存管理:   /api/admin/stock/**"
 echo ""
 echo "日志目录: $PROJECT_DIR/logs/"
 echo ""
-echo "停止服务: ./stop-all.sh"
+echo "停止服务: ./sh/stop-all.sh"
 echo "=========================================="

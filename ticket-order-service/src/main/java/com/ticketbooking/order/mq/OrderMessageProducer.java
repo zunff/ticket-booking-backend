@@ -1,5 +1,6 @@
 package com.ticketbooking.order.mq;
 
+import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.order.config.KafkaTopicConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

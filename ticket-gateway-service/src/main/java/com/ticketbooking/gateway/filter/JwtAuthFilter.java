@@ -1,5 +1,6 @@
 package com.ticketbooking.gateway.filter;
 
+import com.ticketbooking.common.constant.JwtConstants;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -24,9 +25,6 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     @Value("${jwt.secret:ticket-booking-jwt-secret-key-for-demo-purpose-only}")
     private String jwtSecret;
     
-    private static final String TOKEN_PREFIX = "Bearer ";
-    private static final String HEADER_AUTHORIZATION = "Authorization";
-    
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
@@ -36,14 +34,14 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
         
-        String authHeader = request.getHeaders().getFirst(HEADER_AUTHORIZATION);
-        if (authHeader == null || !authHeader.startsWith(TOKEN_PREFIX)) {
+        String authHeader = request.getHeaders().getFirst(JwtConstants.HEADER_AUTHORIZATION);
+        if (authHeader == null || !authHeader.startsWith(JwtConstants.TOKEN_PREFIX)) {
             log.warn("Missing or invalid Authorization header for path: {}", path);
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
         
-        String token = authHeader.substring(TOKEN_PREFIX.length());
+        String token = authHeader.substring(JwtConstants.TOKEN_PREFIX.length());
         
         try {
             SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
@@ -53,9 +51,9 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                     .parseSignedClaims(token)
                     .getPayload();
             
-            Long userId = claims.get("userId", Long.class);
-            String username = claims.get("username", String.class);
-            Boolean isAdmin = claims.get("isAdmin", Boolean.class);
+            Long userId = claims.get(JwtConstants.CLAIM_USER_ID, Long.class);
+            String username = claims.get(JwtConstants.CLAIM_USERNAME, String.class);
+            Boolean isAdmin = claims.get(JwtConstants.CLAIM_IS_ADMIN, Boolean.class);
             
             if (path.startsWith("/admin/") && (isAdmin == null || !isAdmin)) {
                 log.warn("Non-admin user {} attempted to access admin path: {}", username, path);
@@ -64,15 +62,15 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             }
             
             ServerHttpRequest mutatedRequest = request.mutate()
-                    .header("X-User-Id", String.valueOf(userId))
-                    .header("X-Username", username)
-                    .header("X-Is-Admin", String.valueOf(isAdmin != null && isAdmin))
+                    .header(JwtConstants.HEADER_USER_ID, String.valueOf(userId))
+                    .header(JwtConstants.HEADER_USERNAME, username)
+                    .header(JwtConstants.HEADER_IS_ADMIN, String.valueOf(isAdmin != null && isAdmin))
                     .build();
             
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
             
         } catch (Exception e) {
-            log.error("JWT validation failed for path: {}", path, e);
+            log.error("JWT validation failed for path: {}, error: {}, message: {}", path, e.getClass().getSimpleName(), e.getMessage());
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }

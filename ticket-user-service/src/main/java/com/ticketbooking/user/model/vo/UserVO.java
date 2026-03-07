@@ -9,7 +9,7 @@ public class UserVO {
     private String username;
     private String email;
     private String phone;
-    private String status;
+    private Integer status;
     private Boolean isAdmin;
     private LocalDateTime createTime;
 }

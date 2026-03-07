@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -19,13 +18,15 @@ public class Order {
     
     private Long userId;
     
-    private Long ticketId;
+    private Long concertId;
+    
+    private Long gradeId;
     
     private Integer quantity;
     
-    private BigDecimal totalPrice;
+    private Integer totalPrice;
     
-    private String status;
+    private Integer status;
     
     private LocalDateTime createTime;
     

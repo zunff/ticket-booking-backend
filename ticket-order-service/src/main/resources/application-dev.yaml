@@ -10,6 +10,8 @@ spring:
         server-addr: localhost:8848
         namespace: dev
         group: ticket-booking
+      config:
+        enabled: false
   datasource:
     url: jdbc:mysql://localhost:3306/ticket_order?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: root
@@ -50,7 +52,7 @@ spring:
       enable-auto-commit: false
       max-poll-records: 10
       properties:
-        spring.json.trusted.packages: "com.ticketbooking.order.mq"
+        spring.json.trusted.packages: "*"
   threads:
     virtual:
       enabled: true

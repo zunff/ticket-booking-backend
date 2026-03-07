@@ -26,7 +26,7 @@ public class OrderController {
     @RequireAuth
     public Result<String> bookTicket(@Valid @RequestBody BookTicketQO qo) {
         Long userId = UserContext.getUserId();
-        String orderNo = orderService.createOrder(userId, qo.getTicketId(), qo.getQuantity());
+        String orderNo = orderService.createOrder(userId, qo.getConcertId(), qo.getGradeId(), qo.getQuantity());
         return Result.success("抢票成功，订单处理中", orderNo);
     }
     

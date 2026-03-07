@@ -7,11 +7,12 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum OrderStatus {
     
-    PENDING("PENDING", "待支付"),
-    PAID("PAID", "已支付"),
-    CANCELLED("CANCELLED", "已取消"),
-    FAILED("FAILED", "失败");
+    PENDING(1, "待支付"),
+    PAID(2, "已支付"),
+    CANCELLED(3, "已取消"),
+    FAILED(4, "失败");
     
-    private final String code;
+    private final int code;
     private final String desc;
 }
+

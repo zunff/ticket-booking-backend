@@ -27,7 +27,8 @@ public class InternalOrderController {
         Order order = orderService.createOrderFromStock(
                 qo.getOrderNo(),
                 qo.getUserId(),
-                qo.getTicketId(),
+                qo.getConcertId(),
+                qo.getGradeId(),
                 qo.getQuantity(),
                 qo.getTotalPrice(),
                 qo.getStatus()

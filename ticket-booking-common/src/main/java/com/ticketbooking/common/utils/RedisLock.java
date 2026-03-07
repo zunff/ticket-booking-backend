@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
@@ -72,6 +73,6 @@ public class RedisLock {
                         "else " +
                         "    return 0 " +
                         "end";
-        redisUtils.executeLuaScript(script, java.util.List.of(lockKey), requestId);
+        redisUtils.executeLuaScript(script, List.of(lockKey), requestId);
     }
 }

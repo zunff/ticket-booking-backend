@@ -10,6 +10,8 @@ spring:
         server-addr: localhost:8848
         namespace: dev
         group: ticket-booking
+      config:
+        enabled: false
     gateway:
       discovery:
         locator:
@@ -27,6 +29,13 @@ spring:
           uri: lb://ticket-service
           predicates:
             - Path=/api/tickets/**
+          filters:
+            - StripPrefix=1
+        
+        - id: ticket-concerts-service
+          uri: lb://ticket-service
+          predicates:
+            - Path=/api/concerts/**
           filters:
             - StripPrefix=1
         
@@ -55,6 +64,13 @@ spring:
           uri: lb://ticket-service
           predicates:
             - Path=/api/admin/tickets/**
+          filters:
+            - StripPrefix=2
+        
+        - id: admin-concerts-service
+          uri: lb://ticket-service
+          predicates:
+            - Path=/api/admin/concerts/**
           filters:
             - StripPrefix=2
         

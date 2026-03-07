@@ -1,12 +1,13 @@
 package com.ticketbooking.stock.mq;
 
+import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.OrderStatus;
+import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
-import com.ticketbooking.stock.model.qo.CreateOrderQO;
-import com.ticketbooking.stock.model.dto.OrderDTO;
 import com.ticketbooking.stock.client.OrderServiceClient;
 import com.ticketbooking.stock.config.KafkaTopicConfig;
-import com.ticketbooking.stock.constant.RedisKeyConstants;
+import com.ticketbooking.stock.model.dto.OrderDTO;
+import com.ticketbooking.stock.model.qo.CreateOrderQO;
 import com.ticketbooking.stock.service.StockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,27 +55,33 @@ public class OrderMessageConsumer {
                 return;
             }
             
-            int updated = stockService.decrementStock(message.getTicketId(), message.getQuantity(), orderNo);
+            int updated = stockService.decrementStock(
+                    message.getConcertId(), 
+                    message.getGradeId(), 
+                    message.getQuantity(), 
+                    orderNo);
             
             if (updated == 0) {
                 log.warn("Stock decrement failed, creating failed order: {}", orderNo);
                 CreateOrderQO failedQO = new CreateOrderQO(
                         orderNo,
                         message.getUserId(),
-                        message.getTicketId(),
+                        message.getConcertId(),
+                        message.getGradeId(),
                         message.getQuantity(),
                         message.getTotalPrice(),
                         OrderStatus.FAILED.getCode()
                 );
                 orderServiceClient.createOrder(failedQO);
-                rollbackRedis(message.getTicketId(), message.getUserId(), message.getQuantity());
+                rollbackRedis(message.getConcertId(), message.getGradeId(), message.getUserId(), message.getQuantity());
                 redisUtils.delete(idempotentKey);
             } else {
                 log.info("Stock decremented successfully, creating paid order: {}", orderNo);
                 CreateOrderQO paidQO = new CreateOrderQO(
                         orderNo,
                         message.getUserId(),
-                        message.getTicketId(),
+                        message.getConcertId(),
+                        message.getGradeId(),
                         message.getQuantity(),
                         message.getTotalPrice(),
                         OrderStatus.PAID.getCode()
@@ -92,11 +99,12 @@ public class OrderMessageConsumer {
         }
     }
     
-    private void rollbackRedis(Long ticketId, Long userId, Integer quantity) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(ticketId);
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(ticketId, userId);
+    private void rollbackRedis(Long concertId, Long gradeId, Long userId, Integer quantity) {
+        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
+        String userTicketKey = RedisKeyConstants.buildUserTicketKey(concertId, gradeId, userId);
         redisUtils.increment(stockKey, quantity);
         redisUtils.delete(userTicketKey);
-        log.info("Redis rolled back: ticketId={}, userId={}, quantity={}", ticketId, userId, quantity);
+        log.info("Redis rolled back: concertId={}, gradeId={}, userId={}, quantity={}", 
+                concertId, gradeId, userId, quantity);
     }
 }

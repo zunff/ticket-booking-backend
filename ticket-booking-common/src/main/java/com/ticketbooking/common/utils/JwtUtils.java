@@ -1,7 +1,9 @@
 package com.ticketbooking.common.utils;
 
+import com.ticketbooking.common.constant.JwtConstants;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
@@ -13,9 +15,14 @@ import java.util.Map;
 @Component
 public class JwtUtils {
     
-    private static final String SECRET_KEY = "ticket-booking-secret-key-for-jwt-token-generation-2024";
-    private static final SecretKey KEY = Keys.hmacShaKeyFor(SECRET_KEY.getBytes(StandardCharsets.UTF_8));
+    @Value("${jwt.secret:ticket-booking-jwt-secret-key-for-demo-purpose-only}")
+    private String jwtSecret;
+    
     private static final long EXPIRATION = 24 * 60 * 60 * 1000L;
+    
+    private SecretKey getKey() {
+        return Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+    }
     
     public String generateToken(Long userId, String username) {
         return generateToken(userId, username, false);
@@ -23,21 +30,21 @@ public class JwtUtils {
     
     public String generateToken(Long userId, String username, Boolean isAdmin) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId);
-        claims.put("username", username);
-        claims.put("isAdmin", isAdmin != null && isAdmin);
+        claims.put(JwtConstants.CLAIM_USER_ID, userId);
+        claims.put(JwtConstants.CLAIM_USERNAME, username);
+        claims.put(JwtConstants.CLAIM_IS_ADMIN, isAdmin != null && isAdmin);
         return Jwts.builder()
                 .claims(claims)
                 .subject(String.valueOf(userId))
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + EXPIRATION))
-                .signWith(KEY)
+                .signWith(getKey())
                 .compact();
     }
     
     public Claims parseToken(String token) {
         return Jwts.parser()
-                .verifyWith(KEY)
+                .verifyWith(getKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
@@ -45,7 +52,7 @@ public class JwtUtils {
     
     public Long getUserId(String token) {
         Claims claims = parseToken(token);
-        Object userIdObj = claims.get("userId");
+        Object userIdObj = claims.get(JwtConstants.CLAIM_USER_ID);
         if (userIdObj instanceof Integer) {
             return ((Integer) userIdObj).longValue();
         } else if (userIdObj instanceof Long) {
@@ -56,12 +63,12 @@ public class JwtUtils {
     
     public String getUsername(String token) {
         Claims claims = parseToken(token);
-        return claims.get("username", String.class);
+        return claims.get(JwtConstants.CLAIM_USERNAME, String.class);
     }
     
     public Boolean getIsAdmin(String token) {
         Claims claims = parseToken(token);
-        return claims.get("isAdmin", Boolean.class);
+        return claims.get(JwtConstants.CLAIM_IS_ADMIN, Boolean.class);
     }
     
     public boolean validateToken(String token) {

@@ -1,6 +1,7 @@
 package com.ticketbooking.common.interceptor;
 
 import com.ticketbooking.common.annotation.RequireAuth;
+import com.ticketbooking.common.constant.JwtConstants;
 import com.ticketbooking.common.context.UserContext;
 import com.ticketbooking.common.context.UserInfo;
 import com.ticketbooking.common.utils.JwtUtils;
@@ -33,13 +34,28 @@ public class AuthInterceptor implements HandlerInterceptor {
             return true;
         }
         
-        String authHeader = request.getHeader("Authorization");
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        String userIdHeader = request.getHeader(JwtConstants.HEADER_USER_ID);
+        String usernameHeader = request.getHeader(JwtConstants.HEADER_USERNAME);
+        
+        if (userIdHeader != null && usernameHeader != null) {
+            Long userId = Long.parseLong(userIdHeader);
+            String username = usernameHeader;
+            
+            UserInfo userInfo = UserInfo.builder()
+                    .userId(userId)
+                    .username(username)
+                    .build();
+            UserContext.setUserInfo(userInfo);
+            return true;
+        }
+        
+        String authHeader = request.getHeader(JwtConstants.HEADER_AUTHORIZATION);
+        if (authHeader == null || !authHeader.startsWith(JwtConstants.TOKEN_PREFIX)) {
             sendUnauthorizedResponse(response);
             return false;
         }
         
-        String token = authHeader.substring(7);
+        String token = authHeader.substring(JwtConstants.TOKEN_PREFIX.length());
         if (!jwtUtils.validateToken(token)) {
             sendUnauthorizedResponse(response);
             return false;
