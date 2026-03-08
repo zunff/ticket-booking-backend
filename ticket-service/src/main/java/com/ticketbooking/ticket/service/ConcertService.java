@@ -1,5 +1,6 @@
 package com.ticketbooking.ticket.service;
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ticketbooking.ticket.entity.Concert;
 
@@ -13,7 +14,7 @@ public interface ConcertService extends IService<Concert> {
     
     List<Concert> getAllConcerts();
     
-    List<Concert> getOnSaleConcerts();
+    Page<Concert> getOnSaleConcerts(Page<Concert> page);
     
     Concert getConcertById(Long id);
     

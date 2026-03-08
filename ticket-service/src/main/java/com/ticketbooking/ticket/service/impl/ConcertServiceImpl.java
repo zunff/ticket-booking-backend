@@ -1,6 +1,7 @@
 package com.ticketbooking.ticket.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.enums.ConcertStatus;
 import com.ticketbooking.common.enums.ErrorCode;
@@ -45,9 +46,10 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
     }
     
     @Override
-    public List<Concert> getOnSaleConcerts() {
-        return list(new LambdaQueryWrapper<Concert>()
-                .eq(Concert::getStatus, ConcertStatus.ON_SALE.getCode()));
+    public Page<Concert> getOnSaleConcerts(Page<Concert> page) {
+        return page(page, new LambdaQueryWrapper<Concert>()
+                .eq(Concert::getStatus, ConcertStatus.ON_SALE.getCode())
+                .orderByDesc(Concert::getShowTime));
     }
     
     @Override

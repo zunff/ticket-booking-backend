@@ -1,10 +1,9 @@
 package com.ticketbooking.order.controller;
 
-import com.ticketbooking.common.result.Result;
+import com.ticketbooking.common.model.dto.OrderDTO;
+import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.order.entity.Order;
 import com.ticketbooking.order.service.OrderService;
-import com.ticketbooking.order.model.qo.CreateOrderQO;
-import com.ticketbooking.order.model.vo.OrderVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
@@ -13,17 +12,17 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/internal/orders")
 @RequiredArgsConstructor
 public class InternalOrderController {
-    
+
     private final OrderService orderService;
-    
+
     @GetMapping("/{orderNo}")
-    public Result<OrderVO> findByOrderNo(@PathVariable String orderNo) {
+    public OrderDTO findByOrderNo(@PathVariable String orderNo) {
         Order order = orderService.findByOrderNo(orderNo);
-        return order != null ? Result.success(convertToVO(order)) : Result.success(null);
+        return convertToDTO(order);
     }
-    
+
     @PostMapping
-    public Result<OrderVO> createOrder(@RequestBody CreateOrderQO qo) {
+    public OrderDTO createOrder(@RequestBody CreateOrderQO qo) {
         Order order = orderService.createOrderFromStock(
                 qo.getOrderNo(),
                 qo.getUserId(),
@@ -33,12 +32,12 @@ public class InternalOrderController {
                 qo.getTotalPrice(),
                 qo.getStatus()
         );
-        return Result.success(convertToVO(order));
+        return convertToDTO(order);
     }
-    
-    private OrderVO convertToVO(Order order) {
-        OrderVO vo = new OrderVO();
-        BeanUtils.copyProperties(order, vo);
-        return vo;
+
+    private OrderDTO convertToDTO(Order order) {
+        OrderDTO dto = new OrderDTO();
+        BeanUtils.copyProperties(order, dto);
+        return dto;
     }
 }

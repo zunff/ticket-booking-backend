@@ -31,14 +31,14 @@ def test_user_login() -> Dict[str, Any]:
     try:
         response = requests.post(
             f"{BASE_URL}/api/users/login",
-            json={"username": "testuser", "password": "password"},
+            json={"username": "testuser", "password": "123456"},
             timeout=TIMEOUT
         )
         if response.status_code == 200:
             data = response.json()
             if data.get("success"):
                 token = data.get("data", {}).get("token")
-                print_result("User Login", True, f"Token: {token[:20]}...")
+                print_result("User Login", True, f"Token: {token[:20] if token else 'N/A'}...")
                 return {"success": True, "token": token}
         print_result("User Login", False, f"Status code: {response.status_code}, Response: {response.text}")
         return {"success": False}
@@ -46,32 +46,53 @@ def test_user_login() -> Dict[str, Any]:
         print_result("User Login", False, str(e))
         return {"success": False}
 
-def test_get_tickets(token: str) -> Dict[str, Any]:
+def test_get_concerts(token: str) -> Dict[str, Any]:
     try:
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.get(
-            f"{BASE_URL}/api/tickets",
+            f"{BASE_URL}/api/concerts",
             headers=headers,
             timeout=TIMEOUT
         )
         if response.status_code == 200:
             data = response.json()
             if data.get("success"):
-                tickets = data.get("data", [])
-                print_result("Get Tickets", True, f"Found {len(tickets)} tickets")
-                return {"success": True, "tickets": tickets}
-        print_result("Get Tickets", False, f"Status code: {response.status_code}, Response: {response.text}")
+                concerts = data.get("data", {}).get("records", [])
+                print_result("Get Concerts", True, f"Found {len(concerts)} concerts")
+                return {"success": True, "concerts": concerts}
+        print_result("Get Concerts", False, f"Status code: {response.status_code}, Response: {response.text}")
         return {"success": False}
     except Exception as e:
-        print_result("Get Tickets", False, str(e))
+        print_result("Get Concerts", False, str(e))
         return {"success": False}
 
-def test_book_ticket(token: str, ticket_id: int = 1, quantity: int = 1) -> Dict[str, Any]:
+def test_get_concert_detail(token: str, concert_id: int = 1) -> Dict[str, Any]:
+    try:
+        headers = {"Authorization": f"Bearer {token}"}
+        response = requests.get(
+            f"{BASE_URL}/api/concerts/{concert_id}",
+            headers=headers,
+            timeout=TIMEOUT
+        )
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("success"):
+                concert = data.get("data", {})
+                grades = concert.get("grades", [])
+                print_result("Get Concert Detail", True, f"Concert: {concert.get('name')}, Grades: {len(grades)}")
+                return {"success": True, "concert": concert}
+        print_result("Get Concert Detail", False, f"Status code: {response.status_code}, Response: {response.text}")
+        return {"success": False}
+    except Exception as e:
+        print_result("Get Concert Detail", False, str(e))
+        return {"success": False}
+
+def test_book_ticket(token: str, concert_id: int = 1, grade_id: int = 1, quantity: int = 1) -> Dict[str, Any]:
     try:
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.post(
             f"{BASE_URL}/api/orders/book",
-            json={"ticketId": ticket_id, "quantity": quantity},
+            json={"concertId": concert_id, "gradeId": grade_id, "quantity": quantity},
             headers=headers,
             timeout=TIMEOUT
         )
@@ -92,11 +113,11 @@ def test_book_ticket(token: str, ticket_id: int = 1, quantity: int = 1) -> Dict[
         print_result("Book Ticket", False, str(e))
         return {"success": False}
 
-def test_get_stock(token: str, ticket_id: int = 1) -> bool:
+def test_get_stock(token: str, concert_id: int = 1, grade_id: int = 1) -> bool:
     try:
         headers = {"Authorization": f"Bearer {token}"}
         response = requests.get(
-            f"{BASE_URL}/api/stock/{ticket_id}",
+            f"{BASE_URL}/api/stock/{concert_id}/{grade_id}",
             headers=headers,
             timeout=TIMEOUT
         )
@@ -123,13 +144,13 @@ def main():
     
     all_success = True
     
-    print("[1/5] 测试网关健康检查...")
+    print("[1/6] 测试网关健康检查...")
     if not test_health_check():
         all_success = False
         print("\n❌ 网关未启动，停止后续测试")
         sys.exit(1)
     
-    print("\n[2/5] 测试用户登录...")
+    print("\n[2/6] 测试用户登录...")
     login_result = test_user_login()
     if not login_result["success"]:
         all_success = False
@@ -138,18 +159,31 @@ def main():
     
     token = login_result["token"]
     
-    print("\n[3/5] 测试获取票务列表...")
-    tickets_result = test_get_tickets(token)
-    if not tickets_result["success"]:
+    print("\n[3/6] 测试获取演唱会列表...")
+    concerts_result = test_get_concerts(token)
+    if not concerts_result["success"]:
         all_success = False
     
-    print("\n[4/5] 测试抢票功能...")
-    book_result = test_book_ticket(token, ticket_id=1, quantity=1)
-    if not book_result["success"]:
+    print("\n[4/6] 测试获取演唱会详情...")
+    concert_detail_result = test_get_concert_detail(token, concert_id=1)
+    if not concert_detail_result["success"]:
         all_success = False
+    else:
+        concert = concert_detail_result["concert"]
+        grades = concert.get("grades", [])
+        if grades:
+            grade_id = grades[0]["id"]
+            print(f"\n[5/6] 测试抢票功能 (使用 gradeId: {grade_id})...")
+            book_result = test_book_ticket(token, concert_id=1, grade_id=grade_id, quantity=1)
+            if not book_result["success"]:
+                all_success = False
+        else:
+            print("\n[5/6] 测试抢票功能...")
+            print_result("Book Ticket", False, "No grades available")
+            all_success = False
     
-    print("\n[5/5] 测试库存查询...")
-    if not test_get_stock(token, ticket_id=1):
+    print("\n[6/6] 测试库存查询...")
+    if not test_get_stock(token, concert_id=1, grade_id=1):
         all_success = False
     
     print("\n" + "=" * 60)

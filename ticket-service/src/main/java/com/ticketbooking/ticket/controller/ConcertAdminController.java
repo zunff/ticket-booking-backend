@@ -2,18 +2,17 @@ package com.ticketbooking.ticket.controller;
 
 import com.ticketbooking.common.annotation.RequireAdmin;
 import com.ticketbooking.common.result.Result;
+import com.ticketbooking.ticket.converter.ConcertConverter;
 import com.ticketbooking.ticket.entity.Concert;
 import com.ticketbooking.ticket.entity.TicketGrade;
-import com.ticketbooking.ticket.service.ConcertService;
-import com.ticketbooking.ticket.service.TicketGradeService;
 import com.ticketbooking.ticket.model.vo.ConcertVO;
 import com.ticketbooking.ticket.model.vo.TicketGradeVO;
+import com.ticketbooking.ticket.service.ConcertService;
+import com.ticketbooking.ticket.service.TicketGradeService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/admin/concerts")
@@ -22,34 +21,31 @@ public class ConcertAdminController {
     
     private final ConcertService concertService;
     private final TicketGradeService ticketGradeService;
+    private final ConcertConverter concertConverter;
     
     @PostMapping
     @RequireAdmin
     public Result<ConcertVO> createConcert(@RequestBody Concert concert) {
-        return Result.success("演唱会创建成功", convertConcertToVO(concertService.createConcert(concert)));
+        return Result.success("演唱会创建成功", concertConverter.toVO(concertService.createConcert(concert)));
     }
     
     @PutMapping("/{id}")
     @RequireAdmin
     public Result<ConcertVO> updateConcert(@PathVariable Long id, @RequestBody Concert concert) {
         concert.setId(id);
-        return Result.success("演唱会更新成功", convertConcertToVO(concertService.updateConcert(concert)));
+        return Result.success("演唱会更新成功", concertConverter.toVO(concertService.updateConcert(concert)));
     }
     
     @GetMapping
     @RequireAdmin
     public Result<List<ConcertVO>> getAllConcerts() {
-        List<ConcertVO> vos = concertService.getAllConcerts().stream()
-                .map(this::convertConcertToVO)
-                .collect(Collectors.toList());
-        return Result.success(vos);
+        return Result.success(concertConverter.toVOList(concertService.getAllConcerts()));
     }
     
     @GetMapping("/{id}")
     @RequireAdmin
     public Result<ConcertVO> getConcertById(@PathVariable Long id) {
-        Concert concert = concertService.getConcertById(id);
-        return concert != null ? Result.success(convertConcertToVO(concert)) : Result.error(2001, "演唱会不存在");
+        return Result.success(concertConverter.toVO(concertService.getConcertById(id)));
     }
     
     @PostMapping("/{id}/start-sale")
@@ -77,27 +73,12 @@ public class ConcertAdminController {
     @RequireAdmin
     public Result<TicketGradeVO> createGrade(@PathVariable Long concertId, @RequestBody TicketGrade grade) {
         grade.setConcertId(concertId);
-        return Result.success("档位创建成功", convertGradeToVO(ticketGradeService.createTicketGrade(grade)));
+        return Result.success("档位创建成功", concertConverter.toGradeVO(ticketGradeService.createTicketGrade(grade)));
     }
     
     @GetMapping("/{concertId}/grades")
     @RequireAdmin
     public Result<List<TicketGradeVO>> getGrades(@PathVariable Long concertId) {
-        List<TicketGradeVO> vos = ticketGradeService.getGradesByConcertId(concertId).stream()
-                .map(this::convertGradeToVO)
-                .collect(Collectors.toList());
-        return Result.success(vos);
-    }
-    
-    private ConcertVO convertConcertToVO(Concert concert) {
-        ConcertVO vo = new ConcertVO();
-        BeanUtils.copyProperties(concert, vo);
-        return vo;
-    }
-    
-    private TicketGradeVO convertGradeToVO(TicketGrade grade) {
-        TicketGradeVO vo = new TicketGradeVO();
-        BeanUtils.copyProperties(grade, vo);
-        return vo;
+        return Result.success(concertConverter.toGradeVOList(ticketGradeService.getGradesByConcertId(concertId)));
     }
 }

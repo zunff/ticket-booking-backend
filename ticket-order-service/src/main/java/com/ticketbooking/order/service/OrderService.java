@@ -13,10 +13,7 @@ public interface OrderService extends IService<Order> {
     Order findByOrderNo(String orderNo);
     
     List<Order> findByUserId(Long userId);
-    
-    TicketInfoDTO getTicketInfo(Long concertId, Long gradeId);
-    
-    boolean checkUserBoughtTicket(Long concertId, Long gradeId, Long userId);
+
     
     Order createOrderFromStock(String orderNo, Long userId, Long concertId, Long gradeId,
                                Integer quantity, Integer totalPrice, Integer status);

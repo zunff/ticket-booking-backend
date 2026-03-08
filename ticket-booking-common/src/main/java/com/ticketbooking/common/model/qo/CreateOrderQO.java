@@ -1,10 +1,16 @@
-package com.ticketbooking.stock.model.dto;
+package com.ticketbooking.common.model.qo;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
+/**
+ * 创建订单QO - 跨服务共用
+ */
 @Data
-public class OrderDTO {
-    private Long id;
+@NoArgsConstructor
+@AllArgsConstructor
+public class CreateOrderQO {
     private String orderNo;
     private Long userId;
     private Long concertId;

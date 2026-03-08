@@ -17,6 +17,7 @@ public enum ErrorCode {
     USER_NOT_FOUND(1001, "用户不存在"),
     USER_ALREADY_EXISTS(1002, "用户已存在"),
     USER_PASSWORD_ERROR(1003, "密码错误"),
+    USER_LOGIN_FAILED(1004, "用户名或密码错误"),
     
     TICKET_NOT_FOUND(2001, "票务信息不存在"),
     TICKET_STOCK_NOT_ENOUGH(2002, "库存不足"),
@@ -27,6 +28,8 @@ public enum ErrorCode {
     ORDER_ALREADY_EXISTS(3002, "订单已存在"),
     ORDER_ALREADY_PAID(3003, "订单已支付"),
     ORDER_ALREADY_CANCELLED(3004, "订单已取消"),
+    STOCK_NOT_ENOUGH(3005, "库存不足"),
+    STOCK_ROLLBACK_FAILED(3006, "库存回滚失败"),
     
     ALREADY_BOUGHT(4001, "您已经购买过该票，不能重复购买"),
     SYSTEM_BUSY(4002, "系统繁忙，请稍后重试"),

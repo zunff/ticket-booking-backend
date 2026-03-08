@@ -3,6 +3,8 @@ package com.ticketbooking.stock.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.constant.RedisKeyConstants;
+import com.ticketbooking.common.enums.ErrorCode;
+import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.stock.entity.Stock;
 import com.ticketbooking.stock.entity.StockLog;
@@ -32,14 +34,14 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
         Stock stock = getStockByConcertAndGrade(concertId, gradeId);
         if (stock == null) {
             log.warn("Stock not found: concertId={}, gradeId={}", concertId, gradeId);
-            return 0;
+            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
-        
+
         int beforeStock = stock.getAvailableStock();
         if (beforeStock < quantity) {
-            log.warn("Insufficient stock: concertId={}, gradeId={}, available={}, required={}", 
+            log.warn("Insufficient stock: concertId={}, gradeId={}, available={}, required={}",
                     concertId, gradeId, beforeStock, quantity);
-            return 0;
+            throw new BusinessException(ErrorCode.STOCK_NOT_ENOUGH);
         }
         
         int updated = baseMapper.decrementStock(concertId, gradeId, quantity, stock.getVersion());
@@ -63,23 +65,26 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
         Stock stock = getStockByConcertAndGrade(concertId, gradeId);
         if (stock == null) {
             log.warn("Stock not found: concertId={}, gradeId={}", concertId, gradeId);
-            return 0;
+            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
         
         int beforeStock = stock.getAvailableStock();
         
         int updated = baseMapper.incrementStock(concertId, gradeId, quantity);
-        if (updated > 0) {
-            int afterStock = beforeStock + quantity;
-            recordStockLog(concertId, gradeId, orderNo, quantity, beforeStock, afterStock, "INCREMENT", "订单回滚库存");
-            
-            String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-            redisUtils.set(stockKey, String.valueOf(afterStock));
-            
-            log.info("Stock incremented: concertId={}, gradeId={}, quantity={}, before={}, after={}", 
-                    concertId, gradeId, quantity, beforeStock, afterStock);
+        if (updated == 0) {
+            log.warn("Stock increment failed: concertId={}, gradeId={}", concertId, gradeId);
+            throw new BusinessException(ErrorCode.STOCK_ROLLBACK_FAILED);
         }
-        
+
+        int afterStock = beforeStock + quantity;
+        recordStockLog(concertId, gradeId, orderNo, quantity, beforeStock, afterStock, "INCREMENT", "订单回滚库存");
+
+        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
+        redisUtils.set(stockKey, String.valueOf(afterStock));
+
+        log.info("Stock incremented: concertId={}, gradeId={}, quantity={}, before={}, after={}",
+                concertId, gradeId, quantity, beforeStock, afterStock);
+
         return updated;
     }
     
@@ -131,7 +136,7 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
     public void adjustStock(Long concertId, Long gradeId, Integer newStock, String remark) {
         Stock stock = getStockByConcertAndGrade(concertId, gradeId);
         if (stock == null) {
-            throw new RuntimeException("库存不存在");
+            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
         
         int beforeStock = stock.getAvailableStock();
