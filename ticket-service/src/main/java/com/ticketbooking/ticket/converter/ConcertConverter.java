@@ -19,21 +19,18 @@ public class ConcertConverter {
 
     /**
      * 根据时间计算状态文本
-     * - 未上架或未到开始售卖时间：即将开售
-     * - 在售卖时间内：正在开售
-     * - 过了结束售卖时间：已结束
+     * - 在售卖时间内（start_sale_time ~ end_sale_time）：开售中
+     * - 其他情况：已关闭
      */
     private String calculateStatusText(Concert concert) {
         LocalDateTime now = LocalDateTime.now();
         LocalDateTime startSaleTime = concert.getStartSaleTime();
         LocalDateTime endSaleTime = concert.getEndSaleTime();
 
-        if (now.isBefore(startSaleTime)) {
-            return "即将开售";
-        } else if (now.isBefore(endSaleTime)) {
-            return "正在开售";
+        if (!now.isBefore(startSaleTime) && now.isBefore(endSaleTime)) {
+            return "开售中";
         } else {
-            return "已结束";
+            return "已关闭";
         }
     }
 
@@ -119,7 +116,9 @@ public class ConcertConverter {
                     gradeVO.setPrice(grade.getPrice());
                     gradeVO.setTotalStock(grade.getTotalStock());
                     gradeVO.setIsSelectedSeat(grade.getIsSelectedSeat());
-                    gradeVO.setAvailableStock(stockMap.getOrDefault(grade.getId(), 0));
+                    // If stock record doesn't exist, use totalStock as initial value
+                    Integer availableStock = stockMap.get(grade.getId());
+                    gradeVO.setAvailableStock(availableStock != null ? availableStock : grade.getTotalStock());
                     return gradeVO;
                 })
                 .collect(Collectors.toList());

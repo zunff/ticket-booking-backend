@@ -56,16 +56,6 @@ public interface ConcertService extends IService<Concert> {
     Concert getConcertById(Long id);
 
     /**
-     * 开始售票
-     */
-    void startSale(Long concertId);
-
-    /**
-     * 结束售票
-     */
-    void endSale(Long concertId);
-
-    /**
      * 删除演唱会
      */
     void deleteConcert(Long concertId);

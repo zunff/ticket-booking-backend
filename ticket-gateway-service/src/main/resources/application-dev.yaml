@@ -58,35 +58,42 @@ spring:
           predicates:
             - Path=/api/admin/users/**
           filters:
-            - StripPrefix=2
+            - StripPrefix=1
         
         - id: admin-ticket-service
           uri: lb://ticket-service
           predicates:
             - Path=/api/admin/tickets/**
           filters:
-            - StripPrefix=2
+            - StripPrefix=1
         
         - id: admin-concerts-service
           uri: lb://ticket-service
           predicates:
             - Path=/api/admin/concerts/**
           filters:
-            - StripPrefix=2
+            - StripPrefix=1
         
         - id: admin-ticket-order-service
           uri: lb://ticket-order-service
           predicates:
             - Path=/api/admin/orders/**
           filters:
-            - StripPrefix=2
+            - StripPrefix=1
         
         - id: admin-ticket-stock-service
           uri: lb://ticket-stock-service
           predicates:
             - Path=/api/admin/stock/**
           filters:
-            - StripPrefix=2
+            - StripPrefix=1
+
+        - id: admin-dashboard-service
+          uri: lb://ticket-service
+          predicates:
+            - Path=/api/admin/dashboard/**
+          filters:
+            - StripPrefix=1
 
 jwt:
   secret: ticket-booking-jwt-secret-key-for-demo-purpose-only

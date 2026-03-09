@@ -9,7 +9,7 @@ CREATE TABLE `concerts` (
   `show_time` DATETIME NOT NULL COMMENT '演出时间',
   `start_sale_time` DATETIME NOT NULL COMMENT '开始售票时间',
   `end_sale_time` DATETIME NOT NULL COMMENT '结束售票时间',
-  `status` TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1-待售，2-开售中，3-已结束',
+  `status` TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0-已关闭，1-开售中（根据start_sale_time和end_sale_time动态计算）',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -29,10 +29,10 @@ CREATE TABLE `ticket_grade` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='票价档位表';
 
 INSERT INTO concerts (name, venue, show_time, start_sale_time, end_sale_time, status) 
-VALUES ('2024跨年演唱会', '国家体育场', '2024-12-31 20:00:00', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY), 2);
+VALUES ('2024跨年演唱会', '国家体育场', '2024-12-31 20:00:00', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY), 1);
 
-INSERT INTO ticket_grade (concert_id, grade_name, price, total_stock, is_selected_seat) 
-VALUES 
+INSERT INTO ticket_grade (concert_id, grade_name, price, total_stock, is_selected_seat)
+VALUES
 (1, 'VIP内场', 29900, 100, 0),
 (1, '普通看台', 19900, 500, 0),
 (1, '山顶票', 9900, 1000, 0);

@@ -18,7 +18,7 @@ public class StockController {
     @GetMapping("/{concertId}/{gradeId}")
     public Result<Integer> getStock(@PathVariable Long concertId, @PathVariable Long gradeId) {
         Integer stock = stockService.getAvailableStock(concertId, gradeId);
-        return stock != null ? Result.success(stock) : Result.error(2001, "库存不存在");
+        return Result.success(stock);
     }
     
     @PostMapping("/sync/{concertId}/{gradeId}")

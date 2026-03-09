@@ -1,8 +1,14 @@
 package com.ticketbooking.stock.controller;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ticketbooking.common.annotation.RequireAdmin;
+import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.result.Result;
+import com.ticketbooking.stock.converter.StockLogConverter;
 import com.ticketbooking.stock.entity.StockLog;
+import com.ticketbooking.stock.model.qo.StockLogQueryQO;
+import com.ticketbooking.stock.model.vo.StockLogVO;
 import com.ticketbooking.stock.service.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -13,15 +19,40 @@ import java.util.List;
 @RequestMapping("/admin/stock")
 @RequiredArgsConstructor
 public class StockAdminController {
-    
+
     private final StockService stockService;
-    
+    private final StockLogConverter stockLogConverter;
+
+    /**
+     * 获取库存日志（分页）
+     */
+    @GetMapping("/logs")
+    @RequireAdmin
+    public Result<PageResult<StockLogVO>> getStockLogs(StockLogQueryQO qo) {
+        IPage<StockLog> page = stockService.getStockLogsPage(qo);
+        List<StockLogVO> voList = stockLogConverter.toVOList(page.getRecords());
+
+        PageResult<StockLogVO> result = PageResult.of(
+            voList,
+            page.getTotal(),
+            page.getCurrent(),
+            page.getSize()
+        );
+        return Result.success(result);
+    }
+
+    /**
+     * 根据演唱会和票档获取库存日志（保留兼容性）
+     */
     @GetMapping("/logs/{concertId}/{gradeId}")
     @RequireAdmin
-    public Result<List<StockLog>> getStockLogs(@PathVariable Long concertId, @PathVariable Long gradeId) {
-        return Result.success(stockService.getStockLogs(concertId, gradeId));
+    public Result<List<StockLogVO>> getStockLogsByConcertAndGrade(
+            @PathVariable Long concertId,
+            @PathVariable Long gradeId) {
+        List<StockLog> logs = stockService.getStockLogs(concertId, gradeId);
+        return Result.success(stockLogConverter.toVOList(logs));
     }
-    
+
     @PostMapping("/adjust")
     @RequireAdmin
     public Result<String> adjustStock(

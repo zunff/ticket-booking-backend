@@ -32,6 +32,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     public boolean validateUser(Long userId) {
         return getById(userId) != null;
     }
+
+    @Override
+    public UserVO getUserVOById(Long id) {
+        User user = getById(id);
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+        }
+        return userConverter.toVO(user);
+    }
+
+    @Override
+    public UserVO registerAndReturnVO(User user) {
+        User registeredUser = register(user);
+        return userConverter.toVO(registeredUser);
+    }
     
     @Override
     public LoginVO login(LoginQO qo) {

@@ -4,10 +4,13 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.dto.TicketGradeDTO;
+import com.ticketbooking.ticket.client.StockServiceClient;
 import com.ticketbooking.ticket.entity.TicketGrade;
 import com.ticketbooking.ticket.mapper.TicketGradeMapper;
 import com.ticketbooking.ticket.service.TicketGradeService;
 import com.ticketbooking.ticket.service.ConcertService;
+import jakarta.annotation.Resource;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -18,17 +21,32 @@ import java.util.List;
 @Service
 public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, TicketGrade> implements TicketGradeService {
 
-    private final ConcertService concertService;
+    @Lazy
+    @Resource
+    private ConcertService concertService;
 
-    public TicketGradeServiceImpl(@Lazy ConcertService concertService) {
-        this.concertService = concertService;
-    }
+    @Resource
+    private StockServiceClient stockServiceClient;
     
     @Override
     public TicketGrade createTicketGrade(TicketGrade ticketGrade) {
         save(ticketGrade);
-        log.info("TicketGrade created: id={}, concertId={}, gradeName={}", 
+        log.info("TicketGrade created: id={}, concertId={}, gradeName={}",
                 ticketGrade.getId(), ticketGrade.getConcertId(), ticketGrade.getGradeName());
+
+        // Initialize stock for this grade
+        try {
+            stockServiceClient.initStock(
+                    ticketGrade.getConcertId(),
+                    ticketGrade.getId(),
+                    ticketGrade.getTotalStock()
+            );
+            log.info("Stock initialized for new ticket grade: concertId={}, gradeId={}, totalStock={}",
+                    ticketGrade.getConcertId(), ticketGrade.getId(), ticketGrade.getTotalStock());
+        } catch (Exception e) {
+            log.error("Failed to initialize stock for ticket grade: gradeId={}", ticketGrade.getId(), e);
+        }
+
         return ticketGrade;
     }
     

@@ -18,26 +18,33 @@ import com.ticketbooking.ticket.model.vo.ConcertDetailWithStockVO;
 import com.ticketbooking.ticket.model.vo.ConcertVO;
 import com.ticketbooking.ticket.service.ConcertService;
 import com.ticketbooking.ticket.service.TicketGradeService;
+import jakarta.annotation.Resource;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> implements ConcertService {
 
-    private final ConcertConverter concertConverter;
-    private final TicketGradeService ticketGradeService;
-    private final StockServiceClient stockServiceClient;
+    @Resource
+    private ConcertConverter concertConverter;
+
+    @Resource
+    private TicketGradeService ticketGradeService;
+
+    @Resource
+    private StockServiceClient stockServiceClient;
 
     @Override
     public Concert createConcert(Concert concert) {
-        concert.setStatus(ConcertStatus.PENDING.getCode());
+        // 状态根据时间动态计算，默认为已关闭
+        concert.setStatus(ConcertStatus.CLOSED.getCode());
         save(concert);
         log.info("Concert created: id={}, name={}", concert.getId(), concert.getName());
         return concert;
@@ -74,9 +81,34 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
             wrapper.like(Concert::getName, qo.getName().trim());
         }
 
-        // 状态筛选
-        if (qo.getStatus() != null) {
-            wrapper.eq(Concert::getStatus, qo.getStatus());
+        // 基于时间的动态状态筛选
+        if (qo.getTimeStatus() != null) {
+            LocalDateTime now = LocalDateTime.now();
+            switch (qo.getTimeStatus()) {
+                case 0: // 已关闭
+                    wrapper.eq(Concert::getStatus, 0);
+                    break;
+                case 1: // 开售中：在售票时间内
+                    wrapper.ne(Concert::getStatus, 0)
+                            .le(Concert::getStartSaleTime, now)
+                            .gt(Concert::getEndSaleTime, now);
+                    break;
+                case 2: // 即将开售：还没到开始售票时间
+                    wrapper.ne(Concert::getStatus, 0)
+                            .gt(Concert::getStartSaleTime, now);
+                    break;
+                case 3: // 已结束：已过结束售票时间
+                    wrapper.eq(Concert::getStatus, 0)
+                            .le(Concert::getEndSaleTime, now);
+                    break;
+                default:
+                    // 不筛选状态，只排除已关闭的
+                    wrapper.ne(Concert::getStatus, 0);
+                    break;
+            }
+        } else {
+            // 默认只显示非已关闭的演唱会
+            wrapper.ne(Concert::getStatus, 0);
         }
 
         // 按演出时间降序排序
@@ -118,30 +150,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
         return concert;
-    }
-
-    @Override
-    public void startSale(Long concertId) {
-        Concert concert = getById(concertId);
-        if (concert == null) {
-            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-        }
-
-        concert.setStatus(ConcertStatus.ON_SALE.getCode());
-        updateById(concert);
-        log.info("Concert sale started: id={}", concertId);
-    }
-
-    @Override
-    public void endSale(Long concertId) {
-        Concert concert = getById(concertId);
-        if (concert == null) {
-            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-        }
-
-        concert.setStatus(ConcertStatus.ENDED.getCode());
-        updateById(concert);
-        log.info("Concert sale ended: id={}", concertId);
     }
 
     @Override

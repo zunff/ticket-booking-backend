@@ -6,14 +6,13 @@ import lombok.RequiredArgsConstructor;
 @Getter
 @RequiredArgsConstructor
 public enum ConcertStatus {
-    
-    PENDING(1, "待售"),
-    ON_SALE(2, "开售中"),
-    ENDED(3, "已结束");
-    
+
+    CLOSED(0, "已关闭"),
+    ON_SALE(1, "开售中");
+
     private final int code;
     private final String desc;
-    
+
     public static ConcertStatus fromCode(int code) {
         for (ConcertStatus status : values()) {
             if (status.getCode() == code) {

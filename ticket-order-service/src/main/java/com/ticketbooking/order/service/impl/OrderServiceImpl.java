@@ -1,12 +1,16 @@
 package com.ticketbooking.order.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
+import com.ticketbooking.common.model.PageResult;
+import com.ticketbooking.common.model.dto.OrderDTO;
 import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.common.model.dto.StockDTO;
@@ -17,10 +21,14 @@ import com.ticketbooking.order.entity.Order;
 import com.ticketbooking.order.mapper.OrderMapper;
 import com.ticketbooking.order.mq.OrderMessageProducer;
 import com.ticketbooking.order.service.OrderService;
+import com.ticketbooking.order.converter.OrderConverter;
+import com.ticketbooking.order.client.TicketServiceClient;
+import com.ticketbooking.order.model.vo.OrderVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
@@ -28,8 +36,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -47,6 +57,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private final StockServiceClient stockServiceClient;
     private final BookingLuaScript bookingLuaScript;
     private final ObjectMapper objectMapper;
+    private final OrderConverter orderConverter;
+    private final TicketServiceClient ticketServiceClient;
 
     @Override
     public String createOrder(Long userId, Long concertId, Long gradeId, Integer quantity) {
@@ -61,13 +73,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
 
-        log.info("Ticket info loaded: concertId={}, gradeId={}, price={}, stock={}",
-                concertId, gradeId, ticketInfo.getPrice(), ticketInfo.getAvailableStock());
+        log.info("Ticket info loaded: concertId={}, gradeId={}, price={}, stock={}", concertId, gradeId, ticketInfo.getPrice(), ticketInfo.getAvailableStock());
 
         DefaultRedisScript<Long> script = bookingLuaScript.getBookingScript();
         List<String> keys = Arrays.asList(stockKey, userTicketKey);
-        Long result = redisUtils.executeLuaScript(script, keys,
-                String.valueOf(userId), String.valueOf(quantity));
+        Long result = redisUtils.executeLuaScript(script, keys, String.valueOf(userId), String.valueOf(quantity));
 
         log.info("Lua script result: {}", result);
 
@@ -169,21 +179,13 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         String idempotentKey = RedisKeyConstants.buildOrderIdempotentKey(orderNo);
         redisUtils.setEx(idempotentKey, "PROCESSING", IDEMPOTENT_EXPIRE_SECONDS);
 
-        TicketOrderMessage message = new TicketOrderMessage(
-                orderNo, userId, concertId, gradeId, quantity, totalPrice);
+        TicketOrderMessage message = new TicketOrderMessage(orderNo, userId, concertId, gradeId, quantity, totalPrice);
         orderMessageProducer.sendOrderMessage(message);
 
         log.info("Order created: orderNo={}, userId={}, concertId={}, gradeId={}, quantity={}",
                 orderNo, userId, concertId, gradeId, quantity);
 
         return orderNo;
-    }
-
-    private void rollbackRedis(Long concertId, Long gradeId, Long userId, Integer quantity) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(concertId, gradeId, userId);
-        redisUtils.increment(stockKey, quantity);
-        redisUtils.delete(userTicketKey);
     }
 
     @Override
@@ -235,5 +237,118 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             log.error("Failed to parse ticket info: {}", cachedInfo, e);
             return null;
         }
+    }
+
+    @Override
+    public OrderDTO findDTOByOrderNo(String orderNo) {
+        Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
+        // 交给上游自己处理
+        if (order == null) {
+            return null;
+        }
+        return convertToDTO(order);
+    }
+
+    @Override
+    public OrderDTO createOrderDTO(com.ticketbooking.common.model.qo.CreateOrderQO qo) {
+        Order order = createOrderFromStock(
+                qo.getOrderNo(),
+                qo.getUserId(),
+                qo.getConcertId(),
+                qo.getGradeId(),
+                qo.getQuantity(),
+                qo.getTotalPrice(),
+                qo.getStatus()
+        );
+        return convertToDTO(order);
+    }
+
+    private OrderDTO convertToDTO(Order order) {
+        OrderDTO dto = new OrderDTO();
+        BeanUtils.copyProperties(order, dto);
+        return dto;
+    }
+
+    @Override
+    public com.ticketbooking.common.model.PageResult<OrderVO> getOrderPage(Long current, Long size, Long userId, Integer status, String orderNo) {
+        Page<Order> page = new Page<>(current, size);
+
+        IPage<Order> orderPage = page(page,
+                new LambdaQueryWrapper<Order>()
+                        .eq(userId != null, Order::getUserId, userId)
+                        .eq(status != null, Order::getStatus, status)
+                        .eq(orderNo != null, Order::getOrderNo, orderNo)
+                        .orderByDesc(Order::getCreateTime)
+        );
+
+        List<OrderVO> orderVOs = orderConverter.toVOList(orderPage.getRecords());
+        fillConcertAndGradeNames(orderVOs);
+
+        return com.ticketbooking.common.model.PageResult.of(
+                orderVOs,
+                orderPage.getTotal(),
+                orderPage.getCurrent(),
+                orderPage.getSize()
+        );
+    }
+
+    @Override
+    public OrderVO getOrderVOByOrderNo(String orderNo) {
+        Order order = findByOrderNo(orderNo);
+        OrderVO vo = orderConverter.toVO(order);
+        fillConcertAndGradeName(vo);
+        return vo;
+    }
+
+    @Override
+    public List<OrderVO> getOrderVOsByUserId(Long userId) {
+        List<Order> orders = findByUserId(userId);
+        List<OrderVO> orderVOs = orderConverter.toVOList(orders);
+        fillConcertAndGradeNames(orderVOs);
+        return orderVOs;
+    }
+
+    private void fillConcertAndGradeNames(List<OrderVO> orderVOs) {
+        List<Long> gradeIds = orderVOs.stream()
+                .map(OrderVO::getGradeId)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, com.ticketbooking.common.model.dto.TicketGradeDTO> gradeInfoMap = gradeIds.stream()
+                .collect(Collectors.toMap(
+                        id -> id,
+                        id -> {
+                            try {
+                                return ticketServiceClient.getGradeById(id);
+                            } catch (Exception e) {
+                                return new com.ticketbooking.common.model.dto.TicketGradeDTO();
+                            }
+                        }
+                ));
+
+        orderVOs.forEach(vo -> {
+            com.ticketbooking.common.model.dto.TicketGradeDTO gradeInfo = gradeInfoMap.get(vo.getGradeId());
+            if (gradeInfo != null) {
+                vo.setConcertName(gradeInfo.getConcertName());
+                vo.setGradeName(gradeInfo.getGradeName());
+            }
+        });
+    }
+
+    private void fillConcertAndGradeName(OrderVO vo) {
+        try {
+            com.ticketbooking.common.model.dto.TicketGradeDTO gradeInfo = ticketServiceClient.getGradeById(vo.getGradeId());
+            if (gradeInfo != null) {
+                vo.setConcertName(gradeInfo.getConcertName());
+                vo.setGradeName(gradeInfo.getGradeName());
+            }
+        } catch (Exception e) {
+            // Ignore if service is unavailable
+        }
+    }
+
+    @Override
+    public PageResult<OrderVO> getOrderPageByUserId(Long userId, Long current, Long size, Integer status) {
+        return getOrderPage(current, size, userId, status, null);
     }
 }

@@ -20,40 +20,26 @@ public class UserController {
 
     @PostMapping("/login")
     public Result<LoginVO> login(@RequestBody LoginQO qo) {
-        try {
-            LoginVO vo = userService.login(qo);
-            return Result.success("登录成功", vo);
-        } catch (RuntimeException e) {
-            return Result.error(1001, e.getMessage());
-        }
+        LoginVO vo = userService.login(qo);
+        return Result.success("登录成功", vo);
     }
 
     @PostMapping("/register")
     public Result<UserVO> register(@RequestBody User user) {
-        try {
-            User registeredUser = userService.register(user);
-            return Result.success("注册成功", userConverter.toVO(registeredUser));
-        } catch (RuntimeException e) {
-            return Result.error(1002, e.getMessage());
-        }
+        UserVO vo = userService.registerAndReturnVO(user);
+        return Result.success("注册成功", vo);
     }
 
     @GetMapping("/{id}")
     public Result<UserVO> getUser(@PathVariable Long id) {
-        User user = userService.getById(id);
-        if (user == null) {
-            return Result.error(1001, "用户不存在");
-        }
-        return Result.success(userConverter.toVO(user));
+        UserVO vo = userService.getUserVOById(id);
+        return Result.success(vo);
     }
 
     @PostMapping
     public Result<UserVO> createUser(@RequestBody User user) {
-        if (userService.findByUsername(user.getUsername()) != null) {
-            return Result.error(1002, "用户名已存在");
-        }
-        userService.save(user);
-        return Result.success("用户创建成功", userConverter.toVO(user));
+        UserVO vo = userService.registerAndReturnVO(user);
+        return Result.success("用户创建成功", vo);
     }
 
     @GetMapping("/validate/{id}")
