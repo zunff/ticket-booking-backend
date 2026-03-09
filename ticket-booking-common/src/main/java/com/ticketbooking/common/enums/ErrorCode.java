@@ -34,6 +34,7 @@ public enum ErrorCode {
     ALREADY_BOUGHT(4001, "您已经购买过该票，不能重复购买"),
     SYSTEM_BUSY(4002, "系统繁忙，请稍后重试"),
     RATE_LIMITED(4003, "请求过于频繁，请稍后重试"),
+    SERVICE_DEGRADED(4004, "服务暂时不可用，请稍后重试"),
     
     TOKEN_INVALID(5001, "Token无效"),
     TOKEN_EXPIRED(5002, "Token已过期"),

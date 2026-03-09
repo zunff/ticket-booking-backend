@@ -16,21 +16,45 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    
+
     @ExceptionHandler(BusinessException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleBusinessException(BusinessException e) {
         log.warn("Business exception: code={}, message={}", e.getCode(), e.getMessage());
         return Result.error(e.getCode(), e.getMessage());
     }
-    
+
     @ExceptionHandler(AuthException.class)
     @ResponseStatus(HttpStatus.UNAUTHORIZED)
     public Result<Void> handleAuthException(AuthException e) {
         log.warn("Auth exception: code={}, message={}", e.getCode(), e.getMessage());
         return Result.error(e.getCode(), e.getMessage());
     }
-    
+
+    /**
+     * 处理 Feign 调用结果异常
+     * 当远程服务返回非成功状态码时由 FeignResultDecoder 抛出
+     */
+    @ExceptionHandler(FeignResultException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleFeignResultException(FeignResultException e) {
+        log.warn("Feign result exception: service={}, code={}, message={}",
+                e.getServiceName(), e.getCode(), e.getMessage());
+        return Result.error(e.getCode(), e.getMessage());
+    }
+
+    /**
+     * 处理 Feign Fallback 降级异常
+     * 当服务降级时由 Fallback 抛出
+     */
+    @ExceptionHandler(FeignFallbackException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Result<Void> handleFeignFallbackException(FeignFallbackException e) {
+        log.warn("Feign fallback exception: service={}, code={}, message={}",
+                e.getServiceName(), e.getCode(), e.getMessage());
+        return Result.error(e.getCode(), e.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleValidationException(MethodArgumentNotValidException e) {
@@ -40,7 +64,7 @@ public class GlobalExceptionHandler {
         log.warn("Validation exception: {}", message);
         return Result.error(ErrorCode.PARAM_ERROR.getCode(), message);
     }
-    
+
     @ExceptionHandler(BindException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleBindException(BindException e) {
@@ -50,14 +74,21 @@ public class GlobalExceptionHandler {
         log.warn("Bind exception: {}", message);
         return Result.error(ErrorCode.PARAM_ERROR.getCode(), message);
     }
-    
+
     @ExceptionHandler(IllegalArgumentException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Result<Void> handleIllegalArgumentException(IllegalArgumentException e) {
         log.warn("Illegal argument: {}", e.getMessage());
         return Result.error(ErrorCode.PARAM_ERROR.getCode(), e.getMessage());
     }
-    
+
+    @ExceptionHandler(SystemException.class)
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+    public Result<Void> handleSystemException(SystemException e) {
+        log.error("System exception: code={}, message={}", e.getCode(), e.getMessage(), e);
+        return Result.error(e.getCode(), e.getMessage());
+    }
+
     @ExceptionHandler(Exception.class)
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     public Result<Void> handleException(Exception e) {

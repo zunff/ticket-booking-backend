@@ -1,0 +1,40 @@
+package com.ticketbooking.stock.client.fallback;
+
+import com.ticketbooking.common.enums.ErrorCode;
+import com.ticketbooking.common.exception.FeignFallbackException;
+import com.ticketbooking.common.model.dto.OrderDTO;
+import com.ticketbooking.common.model.qo.CreateOrderQO;
+import com.ticketbooking.common.sentinel.FeignFallbackFactory;
+import com.ticketbooking.stock.client.OrderServiceClient;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+/**
+ * OrderServiceClient 降级处理
+ */
+@Slf4j
+@Component
+public class OrderServiceClientFallback extends FeignFallbackFactory<OrderServiceClient> {
+
+    public OrderServiceClientFallback() {
+        super("ticket-order-service");
+    }
+
+    @Override
+    public OrderServiceClient create(Throwable cause) {
+        logFallback(cause);
+        return new OrderServiceClient() {
+            @Override
+            public OrderDTO findByOrderNo(String orderNo) {
+                log.warn("[{}] 查询订单降级: orderNo={}", serviceName, orderNo);
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
+
+            @Override
+            public OrderDTO createOrder(CreateOrderQO qo) {
+                log.warn("[{}] 创建订单降级: orderNo={}", serviceName, qo.getOrderNo());
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
+        };
+    }
+}

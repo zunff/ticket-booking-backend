@@ -1,6 +1,7 @@
 package com.ticketbooking.stock.controller;
 
 import com.ticketbooking.common.model.dto.StockDTO;
+import com.ticketbooking.common.result.Result;
 import com.ticketbooking.stock.service.StockService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -15,38 +16,39 @@ public class InternalStockController {
     private final StockService stockService;
 
     @GetMapping
-    public StockDTO getStock(@RequestParam Long concertId, @RequestParam Long gradeId) {
-        return stockService.getStockDTO(concertId, gradeId);
+    public Result<StockDTO> getStock(@RequestParam Long concertId, @RequestParam Long gradeId) {
+        return Result.success(stockService.getStockDTO(concertId, gradeId));
     }
 
     @GetMapping("/batch/{concertId}")
-    public List<StockDTO> getStocksByConcertId(@PathVariable Long concertId) {
-        return stockService.getStockDTOsByConcertId(concertId);
+    public Result<List<StockDTO>> getStocksByConcertId(@PathVariable Long concertId) {
+        return Result.success(stockService.getStockDTOsByConcertId(concertId));
     }
 
     @PostMapping("/decrement")
-    public Integer decrementStock(
+    public Result<Integer> decrementStock(
             @RequestParam Long concertId,
             @RequestParam Long gradeId,
             @RequestParam Integer quantity,
             @RequestParam String orderNo) {
-        return stockService.decrementStock(concertId, gradeId, quantity, orderNo);
+        return Result.success(stockService.decrementStock(concertId, gradeId, quantity, orderNo));
     }
 
     @PostMapping("/increment")
-    public Integer incrementStock(
+    public Result<Integer> incrementStock(
             @RequestParam Long concertId,
             @RequestParam Long gradeId,
             @RequestParam Integer quantity,
             @RequestParam String orderNo) {
-        return stockService.incrementStock(concertId, gradeId, quantity, orderNo);
+        return Result.success(stockService.incrementStock(concertId, gradeId, quantity, orderNo));
     }
 
     @PostMapping("/init")
-    public void initStock(
+    public Result<Void> initStock(
             @RequestParam Long concertId,
             @RequestParam Long gradeId,
             @RequestParam Integer totalStock) {
         stockService.initStock(concertId, gradeId, totalStock);
+        return Result.success();
     }
 }

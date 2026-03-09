@@ -25,6 +25,7 @@
         <spring-boot.version>3.2.0</spring-boot.version>
         <spring-cloud.version>2023.0.0</spring-cloud.version>
         <spring-cloud-alibaba.version>2023.0.0.0-RC1</spring-cloud-alibaba.version>
+        <sentinel.version>1.8.6</sentinel.version>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <mysql.version>8.0.33</mysql.version>
     </properties>
@@ -71,6 +72,13 @@
                 <groupId>com.ticketbooking</groupId>
                 <artifactId>ticket-booking-common</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Sentinel Gateway (not in BOM) -->
+            <dependency>
+                <groupId>com.alibaba.cloud</groupId>
+                <artifactId>spring-cloud-starter-alibaba-sentinel-gateway</artifactId>
+                <version>${spring-cloud-alibaba.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -12,6 +12,12 @@ spring:
         group: ticket-booking
       config:
         enabled: false
+    sentinel:
+      transport:
+        dashboard: localhost:8858
+        port: 8719
+      eager: true
+      web-context-unify: false
   datasource:
     url: jdbc:mysql://localhost:3306/ticket_ticket?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
     username: root
@@ -50,3 +56,7 @@ management:
 logging:
   level:
     com.ticketbooking: INFO
+
+feign:
+  sentinel:
+    enabled: true
