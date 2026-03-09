@@ -14,6 +14,10 @@ public class ConcertDetailWithStockVO {
     private LocalDateTime startSaleTime;
     private LocalDateTime endSaleTime;
     private Integer status;
+    /**
+     * 状态描述（根据时间动态计算）
+     */
+    private String statusText;
     private LocalDateTime createdAt;
     private List<TicketGradeWithStockVO> grades;
 }

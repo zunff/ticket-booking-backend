@@ -8,18 +8,21 @@ import com.ticketbooking.ticket.entity.TicketGrade;
 import com.ticketbooking.ticket.mapper.TicketGradeMapper;
 import com.ticketbooking.ticket.service.TicketGradeService;
 import com.ticketbooking.ticket.service.ConcertService;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, TicketGrade> implements TicketGradeService {
-    
+
     private final ConcertService concertService;
+
+    public TicketGradeServiceImpl(@Lazy ConcertService concertService) {
+        this.concertService = concertService;
+    }
     
     @Override
     public TicketGrade createTicketGrade(TicketGrade ticketGrade) {

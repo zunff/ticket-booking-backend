@@ -55,7 +55,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             String username = claims.get(JwtConstants.CLAIM_USERNAME, String.class);
             Boolean isAdmin = claims.get(JwtConstants.CLAIM_IS_ADMIN, Boolean.class);
             
-            if (path.startsWith("/admin/") && (isAdmin == null || !isAdmin)) {
+            if (path.startsWith("/api/admin/") && (isAdmin == null || !isAdmin)) {
                 log.warn("Non-admin user {} attempted to access admin path: {}", username, path);
                 exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
                 return exchange.getResponse().setComplete();

@@ -9,13 +9,34 @@ import com.ticketbooking.ticket.model.vo.TicketGradeVO;
 import com.ticketbooking.ticket.model.vo.TicketGradeWithStockVO;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Component
 public class ConcertConverter {
-    
+
+    /**
+     * 根据时间计算状态文本
+     * - 未上架或未到开始售卖时间：即将开售
+     * - 在售卖时间内：正在开售
+     * - 过了结束售卖时间：已结束
+     */
+    private String calculateStatusText(Concert concert) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime startSaleTime = concert.getStartSaleTime();
+        LocalDateTime endSaleTime = concert.getEndSaleTime();
+
+        if (now.isBefore(startSaleTime)) {
+            return "即将开售";
+        } else if (now.isBefore(endSaleTime)) {
+            return "正在开售";
+        } else {
+            return "已结束";
+        }
+    }
+
     public ConcertVO toVO(Concert concert) {
         if (concert == null) {
             return null;
@@ -28,6 +49,7 @@ public class ConcertConverter {
         vo.setStartSaleTime(concert.getStartSaleTime());
         vo.setEndSaleTime(concert.getEndSaleTime());
         vo.setStatus(concert.getStatus());
+        vo.setStatusText(calculateStatusText(concert));
         vo.setCreatedAt(concert.getCreatedAt());
         return vo;
     }
@@ -86,7 +108,8 @@ public class ConcertConverter {
         vo.setStartSaleTime(concert.getStartSaleTime());
         vo.setEndSaleTime(concert.getEndSaleTime());
         vo.setStatus(concert.getStatus());
-        
+        vo.setStatusText(calculateStatusText(concert));
+
         List<TicketGradeWithStockVO> gradeWithStockList = grades.stream()
                 .map(grade -> {
                     TicketGradeWithStockVO gradeVO = new TicketGradeWithStockVO();
@@ -100,7 +123,7 @@ public class ConcertConverter {
                     return gradeVO;
                 })
                 .collect(Collectors.toList());
-        
+
         vo.setGrades(gradeWithStockList);
         return vo;
     }
