@@ -11,9 +11,11 @@ import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.model.dto.OrderDTO;
+import com.ticketbooking.common.model.dto.StockDTO;
+import com.ticketbooking.common.model.dto.TicketGradeDTO;
+import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
-import com.ticketbooking.common.model.dto.StockDTO;
 import com.ticketbooking.order.client.StockServiceClient;
 import com.ticketbooking.order.config.BookingLuaScript;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
@@ -250,7 +252,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     @Override
-    public OrderDTO createOrderDTO(com.ticketbooking.common.model.qo.CreateOrderQO qo) {
+    public OrderDTO createOrderDTO(CreateOrderQO qo) {
         Order order = createOrderFromStock(
                 qo.getOrderNo(),
                 qo.getUserId(),
@@ -270,7 +272,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     @Override
-    public com.ticketbooking.common.model.PageResult<OrderVO> getOrderPage(Long current, Long size, Long userId, Integer status, String orderNo) {
+    public PageResult<OrderVO> getOrderPage(Long current, Long size, Long userId, Integer status, String orderNo) {
         Page<Order> page = new Page<>(current, size);
 
         IPage<Order> orderPage = page(page,
@@ -284,7 +286,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         List<OrderVO> orderVOs = orderConverter.toVOList(orderPage.getRecords());
         fillConcertAndGradeNames(orderVOs);
 
-        return com.ticketbooking.common.model.PageResult.of(
+        return PageResult.of(
                 orderVOs,
                 orderPage.getTotal(),
                 orderPage.getCurrent(),
@@ -314,20 +316,20 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
                 .distinct()
                 .collect(Collectors.toList());
 
-        Map<Long, com.ticketbooking.common.model.dto.TicketGradeDTO> gradeInfoMap = gradeIds.stream()
+        Map<Long, TicketGradeDTO> gradeInfoMap = gradeIds.stream()
                 .collect(Collectors.toMap(
                         id -> id,
                         id -> {
                             try {
                                 return ticketServiceClient.getGradeById(id);
                             } catch (Exception e) {
-                                return new com.ticketbooking.common.model.dto.TicketGradeDTO();
+                                return new TicketGradeDTO();
                             }
                         }
                 ));
 
         orderVOs.forEach(vo -> {
-            com.ticketbooking.common.model.dto.TicketGradeDTO gradeInfo = gradeInfoMap.get(vo.getGradeId());
+            TicketGradeDTO gradeInfo = gradeInfoMap.get(vo.getGradeId());
             if (gradeInfo != null) {
                 vo.setConcertName(gradeInfo.getConcertName());
                 vo.setGradeName(gradeInfo.getGradeName());
@@ -337,7 +339,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     private void fillConcertAndGradeName(OrderVO vo) {
         try {
-            com.ticketbooking.common.model.dto.TicketGradeDTO gradeInfo = ticketServiceClient.getGradeById(vo.getGradeId());
+            TicketGradeDTO gradeInfo = ticketServiceClient.getGradeById(vo.getGradeId());
             if (gradeInfo != null) {
                 vo.setConcertName(gradeInfo.getConcertName());
                 vo.setGradeName(gradeInfo.getGradeName());

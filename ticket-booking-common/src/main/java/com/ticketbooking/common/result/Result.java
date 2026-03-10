@@ -1,6 +1,8 @@
 package com.ticketbooking.common.result;
 
 import lombok.Data;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.ticketbooking.common.enums.ErrorCode;
 import java.io.Serializable;
 
 @Data
@@ -41,10 +43,11 @@ public class Result<T> implements Serializable {
         return new Result<>(code, message, null);
     }
     
-    public static <T> Result<T> error(com.ticketbooking.common.enums.ErrorCode errorCode) {
+    public static <T> Result<T> error(ErrorCode errorCode) {
         return new Result<>(errorCode.getCode(), errorCode.getMessage(), null);
     }
     
+    @JsonIgnore
     public boolean isSuccess() {
         return this.code == 200;
     }

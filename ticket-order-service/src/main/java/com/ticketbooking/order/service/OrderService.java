@@ -3,6 +3,7 @@ package com.ticketbooking.order.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.model.dto.OrderDTO;
+import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
 import com.ticketbooking.order.entity.Order;
 import com.ticketbooking.order.model.vo.OrderVO;
@@ -22,7 +23,7 @@ public interface OrderService extends IService<Order> {
 
     OrderDTO findDTOByOrderNo(String orderNo);
 
-    OrderDTO createOrderDTO(com.ticketbooking.common.model.qo.CreateOrderQO qo);
+    OrderDTO createOrderDTO(CreateOrderQO qo);
 
     /**
      * 分页查询订单（管理员）
