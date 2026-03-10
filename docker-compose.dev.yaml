@@ -100,7 +100,7 @@ services:
       retries: 10
 
   sentinel-dashboard:
-    image: bladex/sentinel-dashboard:1.8.7
+    image: bladex/sentinel-dashboard:1.8.8
     container_name: ticket-sentinel-dashboard
     ports:
       - "8858:8858"

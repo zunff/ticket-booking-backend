@@ -1,7 +1,7 @@
 package com.ticketbooking.common.sentinel;
 
-import com.alibaba.csp.sentinel.adapter.spring.webmvc.callback.BlockExceptionHandler;
-import com.alibaba.csp.sentinel.adapter.spring.webmvc.callback.UrlCleaner;
+import com.alibaba.csp.sentinel.adapter.spring.webmvc_v6x.callback.BlockExceptionHandler;
+import com.alibaba.csp.sentinel.adapter.web.common.UrlCleaner;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketbooking.common.enums.ErrorCode;
@@ -42,8 +42,8 @@ public class SentinelConfig {
      */
     @Bean
     public BlockExceptionHandler blockExceptionHandler() {
-        return (HttpServletRequest request, HttpServletResponse response, BlockException e) -> {
-            log.warn("Sentinel block: uri={}, rule={}", request.getRequestURI(), e.getRule());
+        return (HttpServletRequest request, HttpServletResponse response, String resourceName, BlockException e) -> {
+            log.warn("Sentinel block: uri={}, resource={}, rule={}", request.getRequestURI(), resourceName, e.getRule());
 
             response.setStatus(429);
             response.setContentType("application/json;charset=UTF-8");

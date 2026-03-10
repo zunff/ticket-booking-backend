@@ -24,8 +24,7 @@
         <java.version>21</java.version>
         <spring-boot.version>3.2.0</spring-boot.version>
         <spring-cloud.version>2023.0.0</spring-cloud.version>
-        <spring-cloud-alibaba.version>2023.0.0.0-RC1</spring-cloud-alibaba.version>
-        <sentinel.version>1.8.6</sentinel.version>
+        <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <mysql.version>8.0.33</mysql.version>
     </properties>

@@ -1,16 +1,16 @@
 # Sentinel 集成踩坑记录
 
-> 项目环境: Spring Boot 3.2.0 + Spring Cloud Alibaba 2023.0.0.0-RC1 + Sentinel 1.8.6
+> 项目环境: Spring Boot 3.2.0 + Spring Cloud Alibaba 2023.0.3.2 + Sentinel 1.8.8
 
 ## 1. 版本兼容性问题
 
 ### 问题描述
-Spring Cloud Alibaba 2023.0.0.0-RC1 对应的 Sentinel 版本是 **1.8.6**，不是 1.8.8。
+Spring Cloud Alibaba 2023.0.3.2 对应的 Sentinel 版本是 **1.8.8**。
 
 ### 解决方案
 查看 Spring Cloud Alibaba BOM 中管理的版本：
 ```xml
-<spring-cloud-alibaba.version>2023.0.0.0-RC1</spring-cloud-alibaba.version>
+<spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
 ```
 
 Sentinel 版本由 BOM 自动管理，无需手动指定。
@@ -101,10 +101,48 @@ Sentinel 1.8.6 中**不存在** `com.alibaba.csp.sentinel.slots.block.degrade.Ex
 找不到符号: 类 ExceptionPredicate
 ```
 
-这个接口是在更高版本（1.8.4+）中添加的，但 1.8.6 反而没有。
-
 ### 解决方案
-将 `GlobalSentinelExceptionPredicate` 改为普通工具类，不再实现接口：
+
+**方案一（推荐）：升级 Spring Cloud Alibaba 到 2023.0.3.2**
+
+该版本对应 Sentinel 1.8.8，提供了完整的异常过滤支持：
+
+```xml
+<spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
+```
+
+Sentinel 1.8.8 的 `Tracer` 类提供了 `setExceptionPredicate()` 方法：
+
+```java
+import com.alibaba.csp.sentinel.Tracer;
+import com.alibaba.csp.sentinel.util.function.Predicate;
+
+@Component
+public class GlobalSentinelExceptionPredicate implements Predicate<Throwable> {
+
+    @PostConstruct
+    public void init() {
+        Tracer.setExceptionPredicate(this);
+    }
+
+    @Override
+    public boolean test(Throwable throwable) {
+        // BusinessException 不纳入熔断统计
+        if (throwable instanceof BusinessException) {
+            return false;
+        }
+        // Feign 4xx 不纳入统计，仅 5xx 纳入
+        if (throwable instanceof FeignException fe) {
+            return fe.status() >= 500;
+        }
+        return true;
+    }
+}
+```
+
+**方案二（旧版本兼容）：工具类手动调用**
+
+如果无法升级版本，可将类改为工具类，在具体熔断逻辑中手动调用：
 
 ```java
 @Component
@@ -150,7 +188,7 @@ Sentinel 相关依赖的版本已由 `spring-cloud-alibaba-dependencies` BOM 管
 ## 7. Sentinel Dashboard 账号密码
 
 ### 默认配置
-使用 `bladex/sentinel-dashboard:1.8.7` 镜像时：
+使用 `bladex/sentinel-dashboard:1.8.8` 镜像时：
 - 默认账号: `sentinel`
 - 默认密码: `sentinel`
 
@@ -233,7 +271,7 @@ done
 | 问题 | 根因 | 解决方案 |
 |------|------|----------|
 | sentinel-gateway 依赖不存在 | 2023 版本未发布该模块 | 使用 sentinel-spring-cloud-gateway-adapter |
-| ExceptionPredicate 不存在 | Sentinel 1.8.6 API 差异 | 改为工具类 |
+| ExceptionPredicate 不存在 | Sentinel 1.8.6 API 差异 | 升级 SCA 到 2023.0.3.2 (Sentinel 1.8.8) |
 | 构造函数签名变化 | 版本 API 变化 | 调整参数列表 |
 | 版本管理混乱 | BOM 已管理版本 | 移除父 POM 重复声明 |
 | Dashboard 看不到服务 | 需要流量触发 | 配置 eager: true |
