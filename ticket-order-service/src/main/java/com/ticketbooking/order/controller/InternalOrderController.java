@@ -1,5 +1,6 @@
 package com.ticketbooking.order.controller;
 
+import com.ticketbooking.common.model.dto.DashboardStatsDTO;
 import com.ticketbooking.common.model.dto.OrderDTO;
 import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.common.result.Result;
@@ -22,5 +23,13 @@ public class InternalOrderController {
     @PostMapping
     public Result<OrderDTO> createOrder(@RequestBody CreateOrderQO qo) {
         return Result.success(orderService.createOrderDTO(qo));
+    }
+
+    /**
+     * 获取仪表盘统计数据
+     */
+    @GetMapping("/dashboard-stats")
+    public Result<DashboardStatsDTO> getDashboardStats() {
+        return Result.success(orderService.getDashboardStats());
     }
 }
