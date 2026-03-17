@@ -2,7 +2,8 @@ package com.ticketbooking.stock.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.ticketbooking.common.annotation.RequireAdmin;
+import com.ticketbooking.common.annotation.RequireAuth;
+import com.ticketbooking.common.enums.Role;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.result.Result;
 import com.ticketbooking.stock.converter.StockLogConverter;
@@ -27,7 +28,7 @@ public class StockAdminController {
      * 获取库存日志（分页）
      */
     @GetMapping("/logs")
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<PageResult<StockLogVO>> getStockLogs(StockLogQueryQO qo) {
         IPage<StockLog> page = stockService.getStockLogsPage(qo);
         List<StockLogVO> voList = stockLogConverter.toVOList(page.getRecords());
@@ -45,7 +46,7 @@ public class StockAdminController {
      * 根据演唱会和票档获取库存日志（保留兼容性）
      */
     @GetMapping("/logs/{concertId}/{gradeId}")
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<List<StockLogVO>> getStockLogsByConcertAndGrade(
             @PathVariable Long concertId,
             @PathVariable Long gradeId) {
@@ -54,7 +55,7 @@ public class StockAdminController {
     }
 
     @PostMapping("/adjust")
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<String> adjustStock(
             @RequestParam Long concertId,
             @RequestParam Long gradeId,

@@ -11,9 +11,10 @@ public enum ErrorCode {
     FORBIDDEN(403, "禁止访问"),
     NOT_FOUND(404, "资源不存在"),
     METHOD_NOT_ALLOWED(405, "方法不允许"),
+    TOO_MANY_REQUESTS(429, "请求过于频繁"),
     SYSTEM_ERROR(500, "系统异常"),
     SERVICE_UNAVAILABLE(503, "服务不可用"),
-    
+
     USER_NOT_FOUND(1001, "用户不存在"),
     USER_ALREADY_EXISTS(1002, "用户已存在"),
     USER_PASSWORD_ERROR(1003, "密码错误"),

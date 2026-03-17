@@ -1,6 +1,7 @@
 package com.ticketbooking.ticket.controller;
 
-import com.ticketbooking.common.annotation.RequireAdmin;
+import com.ticketbooking.common.annotation.RequireAuth;
+import com.ticketbooking.common.enums.Role;
 import com.ticketbooking.common.result.Result;
 import com.ticketbooking.ticket.model.vo.ConcertSalesStatsVO;
 import com.ticketbooking.ticket.model.vo.DashboardStatsVO;
@@ -25,7 +26,7 @@ public class DashboardAdminController {
      * 获取仪表盘统计数据
      */
     @GetMapping
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<DashboardStatsVO> getDashboardStats() {
         DashboardStatsVO stats = dashboardService.getDashboardStats();
         return Result.success(stats);
@@ -36,7 +37,7 @@ public class DashboardAdminController {
      * @param days 天数
      */
     @GetMapping("/sales")
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<List<SalesDataPointVO>> getSalesData(
             @RequestParam(defaultValue = "30") Integer days) {
         List<SalesDataPointVO> salesData = dashboardService.getSalesData(days);
@@ -47,7 +48,7 @@ public class DashboardAdminController {
      * 获取演唱会销售统计
      */
     @GetMapping("/concerts")
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<List<ConcertSalesStatsVO>> getConcertSalesStats() {
         List<ConcertSalesStatsVO> concertStats = dashboardService.getConcertSalesStats();
         return Result.success(concertStats);

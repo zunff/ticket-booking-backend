@@ -1,15 +1,17 @@
 package com.ticketbooking.ticket.controller;
 
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.ticketbooking.common.annotation.UserRateLimit;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.result.Result;
-import com.ticketbooking.ticket.entity.Concert;
 import com.ticketbooking.ticket.model.qo.ConcertQueryQO;
 import com.ticketbooking.ticket.model.vo.ConcertDetailWithStockVO;
 import com.ticketbooking.ticket.model.vo.ConcertVO;
 import com.ticketbooking.ticket.service.ConcertService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 演唱会控制器
@@ -39,6 +41,7 @@ public class ConcertController {
      * @param id 演唱会ID
      * @return 演唱会详情
      */
+    @UserRateLimit
     @GetMapping("/{id}")
     public Result<ConcertDetailWithStockVO> getConcertDetail(@PathVariable Long id) {
         ConcertDetailWithStockVO result = concertService.getConcertDetailById(id);
