@@ -1,6 +1,7 @@
 package com.ticketbooking.order.controller;
 
-import com.ticketbooking.common.annotation.RequireAdmin;
+import com.ticketbooking.common.annotation.RequireAuth;
+import com.ticketbooking.common.enums.Role;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.result.Result;
 import com.ticketbooking.order.service.OrderService;
@@ -18,7 +19,7 @@ public class OrderAdminController {
     private final OrderService orderService;
 
     @GetMapping
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<PageResult<OrderVO>> getAllOrders(
             @RequestParam(defaultValue = "1") Long current,
             @RequestParam(defaultValue = "10") Long size,
@@ -30,14 +31,14 @@ public class OrderAdminController {
     }
 
     @GetMapping("/{orderNo}")
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<OrderVO> getOrderByOrderNo(@PathVariable String orderNo) {
         OrderVO vo = orderService.getOrderVOByOrderNo(orderNo);
         return Result.success(vo);
     }
 
     @GetMapping("/user/{userId}")
-    @RequireAdmin
+    @RequireAuth(Role.ADMIN)
     public Result<List<OrderVO>> getOrdersByUserId(@PathVariable Long userId) {
         List<OrderVO> orderVOs = orderService.getOrderVOsByUserId(userId);
         return Result.success(orderVOs);

@@ -50,8 +50,7 @@ public class JwtUtils {
                 .getPayload();
     }
     
-    public Long getUserId(String token) {
-        Claims claims = parseToken(token);
+    public Long getUserId(Claims claims) {
         Object userIdObj = claims.get(JwtConstants.CLAIM_USER_ID);
         if (userIdObj instanceof Integer) {
             return ((Integer) userIdObj).longValue();
@@ -61,22 +60,19 @@ public class JwtUtils {
         return Long.parseLong(String.valueOf(userIdObj));
     }
     
-    public String getUsername(String token) {
-        Claims claims = parseToken(token);
+    public String getUsername(Claims claims) {
         return claims.get(JwtConstants.CLAIM_USERNAME, String.class);
     }
     
-    public Boolean getIsAdmin(String token) {
-        Claims claims = parseToken(token);
+    public Boolean isAdmin(Claims claims) {
         return claims.get(JwtConstants.CLAIM_IS_ADMIN, Boolean.class);
     }
     
-    public boolean validateToken(String token) {
+    public Claims validateToken(String token) {
         try {
-            parseToken(token);
-            return true;
+            return parseToken(token);
         } catch (Exception e) {
-            return false;
+            return null;
         }
     }
 }

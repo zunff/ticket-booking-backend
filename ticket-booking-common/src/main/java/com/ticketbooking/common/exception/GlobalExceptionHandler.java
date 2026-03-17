@@ -24,13 +24,6 @@ public class GlobalExceptionHandler {
         return Result.error(e.getCode(), e.getMessage());
     }
 
-    @ExceptionHandler(AuthException.class)
-    @ResponseStatus(HttpStatus.UNAUTHORIZED)
-    public Result<Void> handleAuthException(AuthException e) {
-        log.warn("Auth exception: code={}, message={}", e.getCode(), e.getMessage());
-        return Result.error(e.getCode(), e.getMessage());
-    }
-
     /**
      * 处理 Feign 调用结果异常
      * 当远程服务返回非成功状态码时由 FeignResultDecoder 抛出
