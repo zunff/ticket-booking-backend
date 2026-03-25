@@ -2,6 +2,7 @@ package com.ticketbooking.common.aspect;
 
 import cn.hutool.json.JSONUtil;
 import com.ticketbooking.common.annotation.RequireAuth;
+import com.ticketbooking.common.annotation.UserRateLimit;
 import com.ticketbooking.common.constant.JwtConstants;
 import com.ticketbooking.common.context.UserContext;
 import com.ticketbooking.common.context.UserInfo;
@@ -29,8 +30,28 @@ public class AuthAspect {
 
     private final JwtUtils jwtUtils;
 
+    /**
+     * 处理 @RequireAuth 注解
+     */
     @Around("@within(requireAuth) || @annotation(requireAuth)")
     public Object authCheck(ProceedingJoinPoint joinPoint, RequireAuth requireAuth) throws Throwable {
+        return doAuthCheck(joinPoint, requireAuth);
+    }
+
+    /**
+     * 处理 @UserRateLimit 注解（需要先认证）
+     */
+    @Around("@annotation(userRateLimit)")
+    public Object authCheckForRateLimit(ProceedingJoinPoint joinPoint, UserRateLimit userRateLimit) throws Throwable {
+        // 从 @UserRateLimit 元注解获取 @RequireAuth
+        RequireAuth requireAuth = userRateLimit.annotationType().getAnnotation(RequireAuth.class);
+        return doAuthCheck(joinPoint, requireAuth);
+    }
+
+    /**
+     * 统一认证逻辑
+     */
+    private Object doAuthCheck(ProceedingJoinPoint joinPoint, RequireAuth requireAuth) throws Throwable {
         // 1. 获取请求对象（AOP 通用获取方式）
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if (attributes == null) {

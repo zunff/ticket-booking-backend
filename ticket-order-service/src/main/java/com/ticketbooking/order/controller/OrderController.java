@@ -1,12 +1,13 @@
 package com.ticketbooking.order.controller;
 
 import com.ticketbooking.common.annotation.RequireAuth;
+import com.ticketbooking.common.annotation.UserRateLimit;
 import com.ticketbooking.common.context.UserContext;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.result.Result;
-import com.ticketbooking.order.service.OrderService;
 import com.ticketbooking.order.model.qo.BookTicketQO;
 import com.ticketbooking.order.model.vo.OrderVO;
+import com.ticketbooking.order.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -18,8 +19,8 @@ public class OrderController {
 
     private final OrderService orderService;
 
+    @UserRateLimit
     @PostMapping("/book")
-    @RequireAuth
     public Result<String> bookTicket(@Valid @RequestBody BookTicketQO qo) {
         Long userId = UserContext.getUserId();
         String orderNo = orderService.createOrder(userId, qo.getConcertId(), qo.getGradeId(), qo.getQuantity());
