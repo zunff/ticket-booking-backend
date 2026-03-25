@@ -5,6 +5,7 @@ import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.dto.TicketGradeDTO;
 import com.ticketbooking.ticket.client.StockServiceClient;
+import com.ticketbooking.ticket.entity.Concert;
 import com.ticketbooking.ticket.entity.TicketGrade;
 import com.ticketbooking.ticket.mapper.TicketGradeMapper;
 import com.ticketbooking.ticket.service.TicketGradeService;
@@ -51,18 +52,6 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
     }
     
     @Override
-    public TicketGrade updateTicketGrade(TicketGrade ticketGrade) {
-        TicketGrade existing = getById(ticketGrade.getId());
-        if (existing == null) {
-            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-        }
-        
-        updateById(ticketGrade);
-        log.info("TicketGrade updated: id={}", ticketGrade.getId());
-        return ticketGrade;
-    }
-    
-    @Override
     public List<TicketGrade> getGradesByConcertId(Long concertId) {
         return baseMapper.findByConcertId(concertId);
     }
@@ -76,18 +65,12 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
         return grade;
     }
     
-    @Override
-    public void deleteTicketGrade(Long id) {
-        removeById(id);
-        log.info("TicketGrade deleted: id={}", id);
-    }
-    
     public TicketGradeDTO getGradeWithConcertName(Long id) {
         TicketGrade grade = getGradeById(id);
         if (grade == null) {
             return null;
         }
-        
+
         TicketGradeDTO dto = new TicketGradeDTO();
         dto.setId(grade.getId());
         dto.setConcertId(grade.getConcertId());
@@ -95,15 +78,17 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
         dto.setPrice(grade.getPrice());
         dto.setTotalStock(grade.getTotalStock());
         dto.setIsSelectedSeat(grade.getIsSelectedSeat());
-        
+
         try {
-            String concertName = concertService.getById(grade.getConcertId()).getName();
-            dto.setConcertName(concertName);
+            Concert concert = concertService.getById(grade.getConcertId());
+            dto.setConcertName(concert.getName());
+            dto.setPurchaseLimit(concert.getPurchaseLimit() != null ? concert.getPurchaseLimit() : 1);
         } catch (Exception e) {
-            log.warn("Failed to get concert name for concertId={}", grade.getConcertId());
+            log.warn("Failed to get concert info for concertId={}", grade.getConcertId());
             dto.setConcertName("");
+            dto.setPurchaseLimit(1);
         }
-        
+
         return dto;
     }
 }

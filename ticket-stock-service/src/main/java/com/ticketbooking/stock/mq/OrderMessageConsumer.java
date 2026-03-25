@@ -153,17 +153,27 @@ public class OrderMessageConsumer {
      * 回滚 Redis（限购校验失败时调用）
      * 1. 恢复库存
      * 2. 减少用户购买计数
+     *
+     * 注意：如果 key 已过期不存在，跳过回滚，避免 INCR/DECR 自动创建错误的值
      */
     private void rollbackRedis(TicketOrderMessage message) {
         try {
             String stockKey = RedisKeyConstants.buildTicketStockKey(message.getConcertId(), message.getGradeId());
             String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(message.getConcertId(), message.getUserId());
 
-            // 恢复库存
-            redisUtils.increment(stockKey, message.getQuantity());
+            // 恢复库存（仅当 key 存在时）
+            if (Boolean.TRUE.equals(redisUtils.hasKey(stockKey))) {
+                redisUtils.increment(stockKey, message.getQuantity());
+            } else {
+                log.warn("stockKey not exists, skip rollback: {}", stockKey);
+            }
 
-            // 减少用户购买计数
-            redisUtils.decrement(userPurchaseKey, message.getQuantity());
+            // 减少用户购买计数（仅当 key 存在时）
+            if (Boolean.TRUE.equals(redisUtils.hasKey(userPurchaseKey))) {
+                redisUtils.decrement(userPurchaseKey, message.getQuantity());
+            } else {
+                log.warn("userPurchaseKey not exists, skip rollback: {}", userPurchaseKey);
+            }
 
             log.info("Redis rolled back for purchase limit: concertId={}, gradeId={}, userId={}, quantity={}",
                      message.getConcertId(), message.getGradeId(), message.getUserId(), message.getQuantity());

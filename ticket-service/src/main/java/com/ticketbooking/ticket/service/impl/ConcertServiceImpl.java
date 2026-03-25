@@ -71,11 +71,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
     }
 
     @Override
-    public List<ConcertVO> getConcertVOList(List<Concert> concerts) {
-        return concertConverter.toVOList(concerts);
-    }
-
-    @Override
     public PageResult<ConcertVO> getConcerts(ConcertQueryQO qo) {
         LambdaQueryWrapper<Concert> wrapper = new LambdaQueryWrapper<>();
 
@@ -171,15 +166,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         }
 
         return vo;
-    }
-
-    @Override
-    public Concert getConcertById(Long id) {
-        Concert concert = getById(id);
-        if (concert == null) {
-            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-        }
-        return concert;
     }
 
     @Override

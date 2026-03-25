@@ -19,9 +19,6 @@ public interface OrderService extends IService<Order> {
 
     List<Order> findByUserId(Long userId);
 
-    Order createOrderFromStock(String orderNo, Long userId, Long concertId, Long gradeId,
-                               Integer quantity, Integer totalPrice, Integer status);
-
     OrderDTO findDTOByOrderNo(String orderNo);
 
     OrderDTO createOrderDTO(CreateOrderQO qo);

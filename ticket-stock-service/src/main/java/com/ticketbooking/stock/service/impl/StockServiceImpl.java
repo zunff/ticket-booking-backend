@@ -51,19 +51,22 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
                     concertId, gradeId, beforeStock, quantity);
             throw new BusinessException(ErrorCode.STOCK_NOT_ENOUGH);
         }
-        
+
         int updated = baseMapper.decrementStock(concertId, gradeId, quantity, stock.getVersion());
         if (updated > 0) {
             int afterStock = beforeStock - quantity;
             recordStockLog(concertId, gradeId, orderNo, -quantity, beforeStock, afterStock, "DECREMENT", "订单扣减库存");
-            
+
+            // 只有 key 存在时才更新 Redis
             String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-            redisUtils.set(stockKey, String.valueOf(afterStock));
-            
-            log.info("Stock decremented: concertId={}, gradeId={}, quantity={}, before={}, after={}", 
+            if (redisUtils.hasKey(stockKey)) {
+                redisUtils.set(stockKey, String.valueOf(afterStock));
+            }
+
+            log.info("Stock decremented: concertId={}, gradeId={}, quantity={}, before={}, after={}",
                     concertId, gradeId, quantity, beforeStock, afterStock);
         }
-        
+
         return updated;
     }
     
@@ -75,9 +78,9 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
             log.warn("Stock not found: concertId={}, gradeId={}", concertId, gradeId);
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
-        
+
         int beforeStock = stock.getAvailableStock();
-        
+
         int updated = baseMapper.incrementStock(concertId, gradeId, quantity);
         if (updated == 0) {
             log.warn("Stock increment failed: concertId={}, gradeId={}", concertId, gradeId);
@@ -87,8 +90,11 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
         int afterStock = beforeStock + quantity;
         recordStockLog(concertId, gradeId, orderNo, quantity, beforeStock, afterStock, "INCREMENT", "订单回滚库存");
 
+        // 只有 key 存在时才更新 Redis
         String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        redisUtils.set(stockKey, String.valueOf(afterStock));
+        if (redisUtils.hasKey(stockKey)) {
+            redisUtils.set(stockKey, String.valueOf(afterStock));
+        }
 
         log.info("Stock incremented: concertId={}, gradeId={}, quantity={}, before={}, after={}",
                 concertId, gradeId, quantity, beforeStock, afterStock);
@@ -146,19 +152,22 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
         if (stock == null) {
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
-        
+
         int beforeStock = stock.getAvailableStock();
         int changeAmount = newStock - beforeStock;
-        
+
         stock.setAvailableStock(newStock);
         updateById(stock);
-        
+
         recordStockLog(concertId, gradeId, "ADMIN", changeAmount, beforeStock, newStock, "ADJUST", remark);
-        
+
+        // 只有 key 存在时才更新 Redis
         String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        redisUtils.set(stockKey, String.valueOf(newStock));
-        
-        log.info("Stock adjusted: concertId={}, gradeId={}, before={}, after={}, remark={}", 
+        if (redisUtils.hasKey(stockKey)) {
+            redisUtils.set(stockKey, String.valueOf(newStock));
+        }
+
+        log.info("Stock adjusted: concertId={}, gradeId={}, before={}, after={}, remark={}",
                 concertId, gradeId, beforeStock, newStock, remark);
     }
     
@@ -215,6 +224,7 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
         dto.setGradeName(grade.getGradeName());
         dto.setPrice(grade.getPrice());
         dto.setAvailableStock(stock.getAvailableStock());
+        dto.setPurchaseLimit(grade.getPurchaseLimit());
 
         return dto;
     }
@@ -249,11 +259,7 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
             newStock.setVersion(0);
             save(newStock);
 
-            // Set to Redis
-            String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-            redisUtils.set(stockKey, String.valueOf(totalStock));
-
-            log.info("Stock initialized: concertId={}, gradeId={}, stock={}", concertId, gradeId, totalStock);
+            log.info("Stock initialized in DB: concertId={}, gradeId={}, stock={}", concertId, gradeId, totalStock);
         }
     }
 }

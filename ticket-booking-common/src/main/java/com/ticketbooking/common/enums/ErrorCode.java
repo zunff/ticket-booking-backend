@@ -23,8 +23,7 @@ public enum ErrorCode {
     TICKET_NOT_FOUND(2001, "票务信息不存在"),
     TICKET_STOCK_NOT_ENOUGH(2002, "库存不足"),
     TICKET_SOLD_OUT(2003, "票已售罄"),
-    TICKET_NOT_AVAILABLE(2004, "票务暂不可购买"),
-    
+
     ORDER_NOT_FOUND(3001, "订单不存在"),
     ORDER_ALREADY_EXISTS(3002, "订单已存在"),
     ORDER_ALREADY_PAID(3003, "订单已支付"),

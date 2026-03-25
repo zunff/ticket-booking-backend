@@ -14,4 +14,8 @@ public class TicketGradeDTO {
     private Integer price;
     private Integer totalStock;
     private Integer isSelectedSeat;
+    /**
+     * 演唱会限购数量
+     */
+    private Integer purchaseLimit;
 }

@@ -51,7 +51,6 @@ import java.util.stream.Collectors;
 public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements OrderService {
 
     private static final DateTimeFormatter ORDER_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-    private static final long IDEMPOTENT_EXPIRE_SECONDS = 24 * 3600;
 
     private final OrderMessageProducer orderMessageProducer;
     private final RedisUtils redisUtils;
@@ -90,7 +89,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         return switch (result.intValue()) {
-            case -1 -> throw new BusinessException(ErrorCode.ALREADY_BOUGHT);
             case -2 -> throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
             case -3 -> throw new BusinessException(ErrorCode.TICKET_SOLD_OUT);
             case -4 -> throw new BusinessException(ErrorCode.SYSTEM_BUSY, "限购配置不存在");
@@ -150,6 +148,9 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
                 return null;
             }
 
+            // 同步写入 stock 和 limit key 到 Redis（作为预热数据过期后的兜底）
+            syncTicketDataToRedis(concertId, gradeId, stock);
+
             return TicketInfoDTO.builder()
                     .concertId(concertId)
                     .gradeId(gradeId)
@@ -157,6 +158,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
                     .gradeName(stock.getGradeName())
                     .price(stock.getPrice())
                     .availableStock(stock.getAvailableStock())
+                    .purchaseLimit(stock.getPurchaseLimit())
                     .build();
         } catch (Exception e) {
             log.error("Failed to load ticket info from DB: concertId={}, gradeId={}", concertId, gradeId, e);
@@ -164,10 +166,31 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
     }
 
+    /**
+     * 同步票务数据到 Redis（库存和限购数量）
+     */
+    private void syncTicketDataToRedis(Long concertId, Long gradeId, StockDTO stock) {
+        // 缓存过期时间：1小时30分钟 给一点容错
+        long expireSeconds = 3600 + 1800;
+
+        // 写入库存 key
+        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
+        redisUtils.setEx(stockKey, String.valueOf(stock.getAvailableStock()), expireSeconds);
+
+        // 写入限购 key
+        String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
+        int purchaseLimit = stock.getPurchaseLimit() != null ? stock.getPurchaseLimit() : 1;
+        redisUtils.setEx(limitKey, String.valueOf(purchaseLimit), expireSeconds);
+
+        log.info("Synced ticket data to Redis: concertId={}, gradeId={}, stock={}, limit={}",
+                concertId, gradeId, stock.getAvailableStock(), purchaseLimit);
+    }
+
     private void saveTicketInfoToCache(String cacheKey, TicketInfoDTO ticketInfo) {
         try {
             String jsonValue = objectMapper.writeValueAsString(ticketInfo);
-            redisUtils.set(cacheKey, jsonValue);
+            // 缓存过期时间：1小时，与其他 key 同步
+            redisUtils.setEx(cacheKey, jsonValue, 3600);
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize ticket info", e);
         }
@@ -176,9 +199,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private String processOrderAsync(Long userId, Long concertId, Long gradeId, Integer quantity, TicketInfoDTO ticketInfo) {
         String orderNo = generateOrderNo();
         Integer totalPrice = ticketInfo.getPrice() * quantity;
-
-        String idempotentKey = RedisKeyConstants.buildOrderIdempotentKey(orderNo);
-        redisUtils.setEx(idempotentKey, "PROCESSING", IDEMPOTENT_EXPIRE_SECONDS);
 
         TicketOrderMessage message = new TicketOrderMessage(orderNo, userId, concertId, gradeId, quantity, totalPrice);
         orderMessageProducer.sendOrderMessage(message);
@@ -204,12 +224,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return list(new LambdaQueryWrapper<Order>()
                 .eq(Order::getUserId, userId)
                 .orderByDesc(Order::getCreateTime));
-    }
-
-    @Override
-    public Order createOrderFromStock(String orderNo, Long userId, Long concertId, Long gradeId,
-                                      Integer quantity, Integer totalPrice, Integer status) {
-        return createOrderFromStock(orderNo, userId, concertId, gradeId, quantity, totalPrice, status, null);
     }
 
     public Order createOrderFromStock(String orderNo, Long userId, Long concertId, Long gradeId,

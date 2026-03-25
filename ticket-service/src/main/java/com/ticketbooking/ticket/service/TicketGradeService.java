@@ -9,14 +9,10 @@ import java.util.List;
 public interface TicketGradeService extends IService<TicketGrade> {
     
     TicketGrade createTicketGrade(TicketGrade ticketGrade);
-    
-    TicketGrade updateTicketGrade(TicketGrade ticketGrade);
-    
+
     List<TicketGrade> getGradesByConcertId(Long concertId);
     
     TicketGrade getGradeById(Long id);
-    
-    void deleteTicketGrade(Long id);
     
     TicketGradeDTO getGradeWithConcertName(Long id);
 }
