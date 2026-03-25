@@ -1,6 +1,7 @@
 package com.ticketbooking.stock.mq;
 
 import com.ticketbooking.common.constant.RedisKeyConstants;
+import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.mq.TicketOrderMessage;
@@ -18,11 +19,19 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 订单消息消费者
+ *
+ * 设计原则：
+ * 1. Redis 是预扣减层，DB 是真实库存层
+ * 2. 消费失败不回滚 Redis（库存不足场景），只标记订单失败状态
+ * 3. 限购校验失败需要回滚 Redis（业务校验失败场景）
+ * 4. Redis 库存由定时任务与 DB 同步保证最终一致性
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -33,22 +42,19 @@ public class OrderMessageConsumer {
     private final RedisUtils redisUtils;
 
     @KafkaListener(topics = KafkaTopicConfig.TICKET_ORDER_TOPIC, groupId = "stock-group", concurrency = "5")
-    @Transactional
-    public void processOrder(@Payload TicketOrderMessage message,
-                             @Header(KafkaHeaders.RECEIVED_KEY) String key,
-                             Acknowledgment acknowledgment) {
+    public void processOrder(@Payload TicketOrderMessage message, @Header(KafkaHeaders.RECEIVED_KEY) String key, Acknowledgment acknowledgment) {
         String orderNo = message.getOrderNo();
         log.info("Processing order message: {}", orderNo);
 
         try {
-            String idempotentKey = RedisKeyConstants.buildConsumeIdempotentKey(orderNo);
-            Boolean setSuccess = redisUtils.setIfAbsent(idempotentKey, "1", 24, TimeUnit.HOURS);
-            if (setSuccess == null || !setSuccess) {
+            // 1. 幂等检查
+            if (!acquireConsumeLock(orderNo)) {
                 log.info("Order already processed (idempotent): {}", orderNo);
                 acknowledgment.acknowledge();
                 return;
             }
 
+            // 2. 检查订单是否已存在
             OrderDTO existingOrder = orderServiceClient.findByOrderNo(orderNo);
             if (existingOrder != null) {
                 log.info("Order already exists in DB: {}", orderNo);
@@ -56,6 +62,25 @@ public class OrderMessageConsumer {
                 return;
             }
 
+            // 3. 最终防线：检查用户是否超出限购
+            int purchaseLimit = getPurchaseLimit(message.getConcertId());
+            int purchasedCount = getUserPurchasedCount(message.getUserId(), message.getConcertId());
+
+            if (purchasedCount + message.getQuantity() > purchaseLimit) {
+                log.warn("Purchase limit exceeded: userId={}, concertId={}, purchased={}, limit={}, request={}",
+                         message.getUserId(), message.getConcertId(), purchasedCount, purchaseLimit, message.getQuantity());
+
+                // 超出限购，回滚 Redis 并创建失败订单
+                rollbackRedis(message);
+                createFailedOrder(message, "超出限购数量，您已购买 " + purchasedCount + " 张，限购 " + purchaseLimit + " 张");
+                acknowledgment.acknowledge();
+                return;
+            }
+
+            // 4. 先创建处理中的订单
+            createProcessingOrder(message);
+
+            // 5. DB 乐观锁扣减库存
             int updated = stockService.decrementStock(
                     message.getConcertId(),
                     message.getGradeId(),
@@ -63,54 +88,171 @@ public class OrderMessageConsumer {
                     orderNo);
 
             if (updated == 0) {
-                log.warn("Stock decrement failed, creating failed order: {}", orderNo);
-                CreateOrderQO failedQO = new CreateOrderQO(
-                        orderNo,
-                        message.getUserId(),
-                        message.getConcertId(),
-                        message.getGradeId(),
-                        message.getQuantity(),
-                        message.getTotalPrice(),
-                        OrderStatus.FAILED.getCode()
-                );
-                orderServiceClient.createOrder(failedQO);
-                rollbackRedis(message.getConcertId(), message.getGradeId(), message.getUserId(), message.getQuantity());
-                redisUtils.delete(idempotentKey);
+                // DB 扣减失败 = 真的没库存了，标记订单失败
+                // 注意：这里不回滚 Redis，因为 Redis 只是预扣减
+                log.warn("Stock decrement failed (sold out): orderNo={}", orderNo);
+                markOrderFailed(orderNo, ErrorCode.TICKET_SOLD_OUT.getMessage());
             } else {
-                log.info("Stock decremented successfully, creating paid order: {}", orderNo);
-                CreateOrderQO paidQO = new CreateOrderQO(
-                        orderNo,
-                        message.getUserId(),
-                        message.getConcertId(),
-                        message.getGradeId(),
-                        message.getQuantity(),
-                        message.getTotalPrice(),
-                        OrderStatus.PAID.getCode()
-                );
-                orderServiceClient.createOrder(paidQO);
+                // 扣减成功，更新订单状态为已支付
+                log.info("Stock decremented successfully: orderNo={}", orderNo);
+                updateOrderToPaid(message);
             }
 
             acknowledgment.acknowledge();
             log.info("Order processed successfully: {}", orderNo);
 
         } catch (BusinessException e) {
-            log.error("Business error processing order message: {}", orderNo, e);
-            rollbackRedis(message.getConcertId(), message.getGradeId(), message.getUserId(), message.getQuantity());
-            redisUtils.delete(RedisKeyConstants.buildConsumeIdempotentKey(orderNo));
+            // 业务异常：标记订单失败，不再重试
+            log.error("Business error processing order: orderNo={}, error={}", orderNo, e.getMessage());
+            markOrderFailed(orderNo, e.getMessage());
+            // 删除幂等 key，允许重新下单
+            deleteConsumeLock(orderNo);
             acknowledgment.acknowledge();
+
         } catch (Exception e) {
-            log.error("Error processing order message: {}", orderNo, e);
-            redisUtils.delete(RedisKeyConstants.buildConsumeIdempotentKey(orderNo));
+            // 系统异常：删除幂等 key，稍后重试
+            log.error("System error processing order: orderNo={}", orderNo, e);
+            deleteConsumeLock(orderNo);
             acknowledgment.nack(Duration.ofSeconds(1));
         }
     }
 
-    private void rollbackRedis(Long concertId, Long gradeId, Long userId, Integer quantity) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(concertId, gradeId, userId);
-        redisUtils.increment(stockKey, quantity);
-        redisUtils.delete(userTicketKey);
-        log.info("Redis rolled back: concertId={}, gradeId={}, userId={}, quantity={}",
-                concertId, gradeId, userId, quantity);
+    /**
+     * 获取演唱会限购数量
+     * 优先从 Redis 获取，否则返回默认值
+     */
+    private int getPurchaseLimit(Long concertId) {
+        try {
+            String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
+            String limit = redisUtils.get(limitKey);
+            if (limit != null) {
+                return Integer.parseInt(limit);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to get purchase limit from Redis: concertId={}", concertId, e);
+        }
+        // 默认限购 1 张
+        return 1;
+    }
+
+    /**
+     * 获取用户已购买数量（从 DB 查询）
+     */
+    private int getUserPurchasedCount(Long userId, Long concertId) {
+        try {
+            Integer count = orderServiceClient.countUserPurchased(userId, concertId);
+            return count != null ? count : 0;
+        } catch (Exception e) {
+            log.error("Failed to get user purchased count: userId={}, concertId={}", userId, concertId, e);
+            // 查询失败返回 0，允许继续下单（降级策略）
+            return 0;
+        }
+    }
+
+    /**
+     * 回滚 Redis（限购校验失败时调用）
+     * 1. 恢复库存
+     * 2. 减少用户购买计数
+     */
+    private void rollbackRedis(TicketOrderMessage message) {
+        try {
+            String stockKey = RedisKeyConstants.buildTicketStockKey(message.getConcertId(), message.getGradeId());
+            String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(message.getConcertId(), message.getUserId());
+
+            // 恢复库存
+            redisUtils.increment(stockKey, message.getQuantity());
+
+            // 减少用户购买计数
+            redisUtils.decrement(userPurchaseKey, message.getQuantity());
+
+            log.info("Redis rolled back for purchase limit: concertId={}, gradeId={}, userId={}, quantity={}",
+                     message.getConcertId(), message.getGradeId(), message.getUserId(), message.getQuantity());
+        } catch (Exception e) {
+            log.error("Failed to rollback Redis: orderNo={}", message.getOrderNo(), e);
+            // Redis 回滚失败不影响主流程，由定时任务同步
+        }
+    }
+
+    /**
+     * 获取消费幂等锁
+     */
+    private boolean acquireConsumeLock(String orderNo) {
+        String idempotentKey = RedisKeyConstants.buildConsumeIdempotentKey(orderNo);
+        Boolean setSuccess = redisUtils.setIfAbsent(idempotentKey, "1", 24, TimeUnit.HOURS);
+        return setSuccess != null && setSuccess;
+    }
+
+    /**
+     * 删除消费幂等锁
+     */
+    private void deleteConsumeLock(String orderNo) {
+        String idempotentKey = RedisKeyConstants.buildConsumeIdempotentKey(orderNo);
+        redisUtils.delete(idempotentKey);
+    }
+
+    /**
+     * 创建处理中的订单
+     */
+    private void createProcessingOrder(TicketOrderMessage message) {
+        CreateOrderQO qo = new CreateOrderQO(
+                message.getOrderNo(),
+                message.getUserId(),
+                message.getConcertId(),
+                message.getGradeId(),
+                message.getQuantity(),
+                message.getTotalPrice(),
+                OrderStatus.PROCESSING.getCode(),
+                null
+        );
+        orderServiceClient.createOrder(qo);
+        log.info("Created processing order: {}", message.getOrderNo());
+    }
+
+    /**
+     * 创建失败订单
+     */
+    private void createFailedOrder(TicketOrderMessage message, String failReason) {
+        CreateOrderQO qo = new CreateOrderQO(
+                message.getOrderNo(),
+                message.getUserId(),
+                message.getConcertId(),
+                message.getGradeId(),
+                message.getQuantity(),
+                message.getTotalPrice(),
+                OrderStatus.FAILED.getCode(),
+                failReason
+        );
+        orderServiceClient.createOrder(qo);
+        log.info("Created failed order: orderNo={}, reason={}", message.getOrderNo(), failReason);
+    }
+
+    /**
+     * 更新订单状态为已支付
+     */
+    private void updateOrderToPaid(TicketOrderMessage message) {
+        CreateOrderQO qo = new CreateOrderQO(
+                message.getOrderNo(),
+                message.getUserId(),
+                message.getConcertId(),
+                message.getGradeId(),
+                message.getQuantity(),
+                message.getTotalPrice(),
+                OrderStatus.PAID.getCode(),
+                null
+        );
+        orderServiceClient.createOrder(qo);
+        log.info("Updated order to PAID: {}", message.getOrderNo());
+    }
+
+    /**
+     * 标记订单失败
+     */
+    private void markOrderFailed(String orderNo, String reason) {
+        try {
+            orderServiceClient.markOrderFailed(orderNo, reason);
+            log.info("Order marked as failed: orderNo={}, reason={}", orderNo, reason);
+        } catch (Exception e) {
+            log.error("Failed to mark order as failed: orderNo={}, reason={}", orderNo, reason, e);
+        }
     }
 }

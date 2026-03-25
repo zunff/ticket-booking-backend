@@ -1,6 +1,8 @@
 package com.ticketbooking.ticket.controller;
 
 import com.ticketbooking.common.annotation.UserRateLimit;
+import com.ticketbooking.common.context.UserContext;
+import com.ticketbooking.common.context.UserInfo;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.result.Result;
 import com.ticketbooking.ticket.model.qo.ConcertQueryQO;
@@ -36,7 +38,7 @@ public class ConcertController {
     }
 
     /**
-     * 获取演唱会详情（包含库存信息）
+     * 获取演唱会详情（包含库存信息和用户购买数量）
      *
      * @param id 演唱会ID
      * @return 演唱会详情
@@ -44,7 +46,11 @@ public class ConcertController {
     @UserRateLimit
     @GetMapping("/{id}")
     public Result<ConcertDetailWithStockVO> getConcertDetail(@PathVariable Long id) {
-        ConcertDetailWithStockVO result = concertService.getConcertDetailById(id);
+        // 获取当前登录用户ID
+        UserInfo userInfo = UserContext.getUserInfo();
+        Long userId = userInfo != null ? userInfo.getUserId() : null;
+
+        ConcertDetailWithStockVO result = concertService.getConcertDetailById(id, userId);
         return Result.success(result);
     }
 }

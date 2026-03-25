@@ -35,6 +35,27 @@ public class OrderServiceClientFallback extends FeignFallbackFactory<OrderServic
                 log.warn("[{}] 创建订单降级: orderNo={}", serviceName, qo.getOrderNo());
                 throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
             }
+
+            @Override
+            public Void markOrderFailed(String orderNo, String reason) {
+                log.warn("[{}] 标记订单失败降级: orderNo={}, reason={}", serviceName, orderNo, reason);
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
+
+            @Override
+            public Boolean hasUserBought(Long userId, Long concertId, Long gradeId) {
+                log.warn("[{}] 检查用户购买降级: userId={}, concertId={}, gradeId={}",
+                         serviceName, userId, concertId, gradeId);
+                // 降级时返回 false，允许继续下单（宁可多卖也不能误拒）
+                return false;
+            }
+
+            @Override
+            public Integer countUserPurchased(Long userId, Long concertId) {
+                log.warn("[{}] 查询用户购买数量降级: userId={}, concertId={}", serviceName, userId, concertId);
+                // 降级时返回 0，允许继续下单
+                return 0;
+            }
         };
     }
 }

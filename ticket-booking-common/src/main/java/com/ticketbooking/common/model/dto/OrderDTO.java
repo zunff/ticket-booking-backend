@@ -15,4 +15,8 @@ public class OrderDTO {
     private Integer quantity;
     private Integer totalPrice;
     private Integer status;
+    /**
+     * 失败原因（当 status=FAILED 时显示）
+     */
+    private String failReason;
 }

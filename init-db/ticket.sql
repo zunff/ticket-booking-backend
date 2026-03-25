@@ -9,6 +9,7 @@ CREATE TABLE `concerts` (
   `show_time` DATETIME NOT NULL COMMENT '演出时间',
   `start_sale_time` DATETIME NOT NULL COMMENT '开始售票时间',
   `end_sale_time` DATETIME NOT NULL COMMENT '结束售票时间',
+  `purchase_limit` INT NOT NULL DEFAULT 1 COMMENT '每人限购数量',
   `status` TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0-已关闭，1-开售中（根据start_sale_time和end_sale_time动态计算）',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

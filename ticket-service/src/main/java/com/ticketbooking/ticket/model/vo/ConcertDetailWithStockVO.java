@@ -27,6 +27,21 @@ public class ConcertDetailWithStockVO {
      */
     private String statusText;
 
+    /**
+     * 每人限购数量
+     */
+    private Integer purchaseLimit;
+
+    /**
+     * 当前用户已购买数量（需要登录后才有值）
+     */
+    private Integer userPurchasedCount;
+
+    /**
+     * 当前用户是否可以继续购买
+     */
+    private Boolean canPurchase;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")
     private LocalDateTime createdAt;
 

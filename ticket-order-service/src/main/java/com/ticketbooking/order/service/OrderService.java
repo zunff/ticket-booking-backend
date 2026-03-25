@@ -27,6 +27,13 @@ public interface OrderService extends IService<Order> {
     OrderDTO createOrderDTO(CreateOrderQO qo);
 
     /**
+     * 标记订单失败
+     * @param orderNo 订单号
+     * @param failReason 失败原因
+     */
+    void markOrderFailed(String orderNo, String failReason);
+
+    /**
      * 分页查询订单（管理员）
      */
     PageResult<OrderVO> getOrderPage(Long current, Long size, Long userId, Integer status, String orderNo);
@@ -50,4 +57,21 @@ public interface OrderService extends IService<Order> {
      * 获取仪表盘订单统计数据
      */
     DashboardStatsDTO getDashboardStats();
+
+    /**
+     * 检查用户是否已购买过指定档位的票
+     * @param userId 用户ID
+     * @param concertId 演唱会ID
+     * @param gradeId 档位ID
+     * @return true-已购买，false-未购买
+     */
+    boolean hasUserBought(Long userId, Long concertId, Long gradeId);
+
+    /**
+     * 查询用户在演唱会的已购买数量（限购校验用）
+     * @param userId 用户ID
+     * @param concertId 演唱会ID
+     * @return 已购买数量（只统计已支付订单）
+     */
+    int countUserPurchased(Long userId, Long concertId);
 }

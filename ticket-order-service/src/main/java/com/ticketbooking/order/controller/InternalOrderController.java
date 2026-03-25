@@ -26,6 +26,35 @@ public class InternalOrderController {
     }
 
     /**
+     * 标记订单失败
+     */
+    @PutMapping("/{orderNo}/fail")
+    public Result<Void> markOrderFailed(@PathVariable String orderNo,
+                                        @RequestParam String reason) {
+        orderService.markOrderFailed(orderNo, reason);
+        return Result.success();
+    }
+
+    /**
+     * 检查用户是否已购买
+     */
+    @GetMapping("/check-bought")
+    public Result<Boolean> hasUserBought(@RequestParam Long userId,
+                                         @RequestParam Long concertId,
+                                         @RequestParam Long gradeId) {
+        return Result.success(orderService.hasUserBought(userId, concertId, gradeId));
+    }
+
+    /**
+     * 查询用户在演唱会的已购买数量
+     */
+    @GetMapping("/count-purchased")
+    public Result<Integer> countUserPurchased(@RequestParam Long userId,
+                                               @RequestParam Long concertId) {
+        return Result.success(orderService.countUserPurchased(userId, concertId));
+    }
+
+    /**
      * 获取仪表盘统计数据
      */
     @GetMapping("/dashboard-stats")

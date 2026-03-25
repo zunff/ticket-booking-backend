@@ -30,7 +30,7 @@ public interface ConcertService extends IService<Concert> {
     List<Concert> getAllConcerts();
 
     /**
-     * 转换演唱会列表为VO列表
+     * 获取转换演唱会列表为VO列表
      */
     List<ConcertVO> getConcertVOList(List<Concert> concerts);
 
@@ -49,6 +49,15 @@ public interface ConcertService extends IService<Concert> {
      * @return 演唱会详情VO
      */
     ConcertDetailWithStockVO getConcertDetailById(Long id);
+
+    /**
+     * 获取演唱会详情（包含库存信息和用户购买数量）
+     *
+     * @param id 演唱会ID
+     * @param userId 用户ID（可为null，未登录时不查询购买数量）
+     * @return 演唱会详情VO
+     */
+    ConcertDetailWithStockVO getConcertDetailById(Long id, Long userId);
 
     /**
      * 根据ID获取演唱会实体

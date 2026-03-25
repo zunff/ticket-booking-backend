@@ -18,4 +18,8 @@ public class CreateOrderQO {
     private Integer quantity;
     private Integer totalPrice;
     private Integer status;
+    /**
+     * 失败原因（当 status=FAILED 时使用）
+     */
+    private String failReason;
 }

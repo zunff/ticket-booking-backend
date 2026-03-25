@@ -8,6 +8,7 @@ import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.model.dto.StockDTO;
+import com.ticketbooking.ticket.client.OrderServiceClient;
 import com.ticketbooking.ticket.client.StockServiceClient;
 import com.ticketbooking.ticket.converter.ConcertConverter;
 import com.ticketbooking.ticket.entity.Concert;
@@ -19,7 +20,6 @@ import com.ticketbooking.ticket.model.vo.ConcertVO;
 import com.ticketbooking.ticket.service.ConcertService;
 import com.ticketbooking.ticket.service.TicketGradeService;
 import jakarta.annotation.Resource;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -40,6 +40,9 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Resource
     private StockServiceClient stockServiceClient;
+
+    @Resource
+    private OrderServiceClient orderServiceClient;
 
     @Override
     public Concert createConcert(Concert concert) {
@@ -129,6 +132,11 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     public ConcertDetailWithStockVO getConcertDetailById(Long id) {
+        return getConcertDetailById(id, null);
+    }
+
+    @Override
+    public ConcertDetailWithStockVO getConcertDetailById(Long id, Long userId) {
         Concert concert = getById(id);
         if (concert == null) {
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
@@ -140,7 +148,29 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         Map<Long, Integer> stockMap = stocks.stream()
                 .collect(Collectors.toMap(StockDTO::getGradeId, StockDTO::getAvailableStock));
 
-        return concertConverter.toDetailWithStockVO(concert, grades, stockMap);
+        ConcertDetailWithStockVO vo = concertConverter.toDetailWithStockVO(concert, grades, stockMap);
+
+        // 设置限购数量
+        int purchaseLimit = concert.getPurchaseLimit() != null ? concert.getPurchaseLimit() : 1;
+        vo.setPurchaseLimit(purchaseLimit);
+
+        // 查询用户购买数量
+        if (userId != null) {
+            try {
+                int purchasedCount = orderServiceClient.countUserPurchased(userId, id);
+                vo.setUserPurchasedCount(purchasedCount);
+                vo.setCanPurchase(purchasedCount < purchaseLimit);
+            } catch (Exception e) {
+                log.warn("Failed to get user purchased count: userId={}, concertId={}", userId, id, e);
+                vo.setUserPurchasedCount(0);
+                vo.setCanPurchase(true);
+            }
+        } else {
+            vo.setUserPurchasedCount(0);
+            vo.setCanPurchase(true);
+        }
+
+        return vo;
     }
 
     @Override

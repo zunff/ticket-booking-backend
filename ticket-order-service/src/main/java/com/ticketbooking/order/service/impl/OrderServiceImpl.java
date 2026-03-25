@@ -8,6 +8,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
+import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.model.dto.DashboardStatsDTO;
@@ -18,15 +19,15 @@ import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.order.client.StockServiceClient;
+import com.ticketbooking.order.client.TicketServiceClient;
 import com.ticketbooking.order.config.BookingLuaScript;
-import com.ticketbooking.order.model.dto.TicketInfoDTO;
+import com.ticketbooking.order.converter.OrderConverter;
 import com.ticketbooking.order.entity.Order;
 import com.ticketbooking.order.mapper.OrderMapper;
+import com.ticketbooking.order.model.dto.TicketInfoDTO;
+import com.ticketbooking.order.model.vo.OrderVO;
 import com.ticketbooking.order.mq.OrderMessageProducer;
 import com.ticketbooking.order.service.OrderService;
-import com.ticketbooking.order.converter.OrderConverter;
-import com.ticketbooking.order.client.TicketServiceClient;
-import com.ticketbooking.order.model.vo.OrderVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
@@ -51,8 +52,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     private static final DateTimeFormatter ORDER_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final long IDEMPOTENT_EXPIRE_SECONDS = 24 * 3600;
-    private static final long LOCK_WAIT_TIME = 3;
-    private static final long LOCK_LEASE_TIME = 10;
 
     private final OrderMessageProducer orderMessageProducer;
     private final RedisUtils redisUtils;
@@ -66,7 +65,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     public String createOrder(Long userId, Long concertId, Long gradeId, Integer quantity) {
         String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        String userTicketKey = RedisKeyConstants.buildUserTicketKey(concertId, gradeId, userId);
+        String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(concertId, userId);
+        String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
 
         log.info("Creating order: userId={}, concertId={}, gradeId={}, quantity={}",
                 userId, concertId, gradeId, quantity);
@@ -79,27 +79,25 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         log.info("Ticket info loaded: concertId={}, gradeId={}, price={}, stock={}", concertId, gradeId, ticketInfo.getPrice(), ticketInfo.getAvailableStock());
 
         DefaultRedisScript<Long> script = bookingLuaScript.getBookingScript();
-        List<String> keys = Arrays.asList(stockKey, userTicketKey);
+        // KEYS: stockKey, userPurchaseKey, limitKey
+        List<String> keys = Arrays.asList(stockKey, userPurchaseKey, limitKey);
         Long result = redisUtils.executeLuaScript(script, keys, String.valueOf(userId), String.valueOf(quantity));
 
-        log.info("Lua script result: {}", result);
+        log.info("Lua script result: {} ({})", result, BookingLuaScript.getResultDesc(result));
 
         if (result == null) {
             throw new BusinessException(ErrorCode.SYSTEM_BUSY);
         }
 
-        switch (result.intValue()) {
-            case -1:
-                throw new BusinessException(ErrorCode.ALREADY_BOUGHT);
-            case -2:
-                throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-            case -3:
-                throw new BusinessException(ErrorCode.TICKET_SOLD_OUT);
-            case 1:
-                return processOrderAsync(userId, concertId, gradeId, quantity, ticketInfo);
-            default:
-                throw new BusinessException(ErrorCode.SYSTEM_BUSY);
-        }
+        return switch (result.intValue()) {
+            case -1 -> throw new BusinessException(ErrorCode.ALREADY_BOUGHT);
+            case -2 -> throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
+            case -3 -> throw new BusinessException(ErrorCode.TICKET_SOLD_OUT);
+            case -4 -> throw new BusinessException(ErrorCode.SYSTEM_BUSY, "限购配置不存在");
+            case -5 -> throw new BusinessException(ErrorCode.ALREADY_BOUGHT, "超出限购数量");
+            case 1 -> processOrderAsync(userId, concertId, gradeId, quantity, ticketInfo);
+            default -> throw new BusinessException(ErrorCode.SYSTEM_BUSY);
+        };
     }
 
     private TicketInfoDTO getTicketInfoWithLock(Long concertId, Long gradeId) {
@@ -110,11 +108,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             return parseTicketInfo(cachedInfo);
         }
 
-        String lockKey = "lock:ticket:info:" + concertId + ":" + gradeId;
+        String lockKey = RedisKeyConstants.buildTicketLockKey(concertId, gradeId);
         RLock lock = redissonClient.getLock(lockKey);
 
         try {
-            boolean acquired = lock.tryLock(LOCK_WAIT_TIME, LOCK_LEASE_TIME, TimeUnit.SECONDS);
+            boolean acquired = lock.tryLock(3, 10, TimeUnit.SECONDS);
             if (!acquired) {
                 log.warn("Failed to acquire lock for ticket info: concertId={}, gradeId={}", concertId, gradeId);
                 throw new BusinessException(ErrorCode.SYSTEM_BUSY);
@@ -211,6 +209,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     public Order createOrderFromStock(String orderNo, Long userId, Long concertId, Long gradeId,
                                       Integer quantity, Integer totalPrice, Integer status) {
+        return createOrderFromStock(orderNo, userId, concertId, gradeId, quantity, totalPrice, status, null);
+    }
+
+    public Order createOrderFromStock(String orderNo, Long userId, Long concertId, Long gradeId,
+                                      Integer quantity, Integer totalPrice, Integer status, String failReason) {
         Order order = new Order();
         order.setOrderNo(orderNo);
         order.setUserId(userId);
@@ -219,9 +222,10 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setQuantity(quantity);
         order.setTotalPrice(totalPrice);
         order.setStatus(status);
+        order.setFailReason(failReason);
         save(order);
 
-        log.info("Order created from stock service: orderNo={}, status={}", orderNo, status);
+        log.info("Order created from stock service: orderNo={}, status={}, failReason={}", orderNo, status, failReason);
         return order;
     }
 
@@ -261,9 +265,23 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
                 qo.getGradeId(),
                 qo.getQuantity(),
                 qo.getTotalPrice(),
-                qo.getStatus()
+                qo.getStatus(),
+                qo.getFailReason()
         );
         return convertToDTO(order);
+    }
+
+    @Override
+    public void markOrderFailed(String orderNo, String failReason) {
+        Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
+        if (order != null) {
+            order.setStatus(OrderStatus.FAILED.getCode());
+            order.setFailReason(failReason);
+            updateById(order);
+            log.info("Order marked as failed: orderNo={}, reason={}", orderNo, failReason);
+        } else {
+            log.warn("Order not found when marking failed: orderNo={}", orderNo);
+        }
     }
 
     private OrderDTO convertToDTO(Order order) {
@@ -396,5 +414,29 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
                 totalOrders, totalRevenue, todayOrders, todayRevenue);
 
         return stats;
+    }
+
+    @Override
+    public boolean hasUserBought(Long userId, Long concertId, Long gradeId) {
+        // 查询是否存在已支付的订单
+        long count = count(new LambdaQueryWrapper<Order>()
+                .eq(Order::getUserId, userId)
+                .eq(Order::getConcertId, concertId)
+                .eq(Order::getGradeId, gradeId)
+                .eq(Order::getStatus, OrderStatus.PAID.getCode()));
+        return count > 0;
+    }
+
+    @Override
+    public int countUserPurchased(Long userId, Long concertId) {
+        // 统计用户在该演唱会的已支付订单总票数
+        List<Order> orders = list(new LambdaQueryWrapper<Order>()
+                .eq(Order::getUserId, userId)
+                .eq(Order::getConcertId, concertId)
+                .eq(Order::getStatus, OrderStatus.PAID.getCode()));
+
+        return orders.stream()
+                .mapToInt(o -> o.getQuantity() != null ? o.getQuantity() : 0)
+                .sum();
     }
 }
