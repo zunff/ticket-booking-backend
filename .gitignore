@@ -8,3 +8,6 @@ test_results_*.json
 
 .agents
 .claude
+
+ticket-*/src/main/resources/application-test.yaml
+ticket-*/src/main/resources/application-prod.yaml

@@ -1,9 +1,4 @@
-server:
-  port: 8081
-
 spring:
-  application:
-    name: ticket-user-service
   cloud:
     nacos:
       discovery:
@@ -34,24 +29,9 @@ spring:
       port: 6379
       timeout: 3000
 
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  configuration:
-    map-underscore-to-camel-case: true
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
-
 logging:
   level:
     com.ticketbooking: INFO
-
-feign:
-  sentinel:
-    enabled: true
 
 jwt:
   secret: ticket-booking-jwt-secret-key-for-demo-purpose-only

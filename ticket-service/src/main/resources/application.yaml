@@ -22,3 +22,7 @@ management:
 logging:
   level:
     com.ticketbooking: INFO
+
+feign:
+  sentinel:
+    enabled: true

@@ -1,9 +1,4 @@
-server:
-  port: 8080
-
 spring:
-  application:
-    name: ticket-service
   cloud:
     nacos:
       discovery:
@@ -38,25 +33,9 @@ spring:
           max-active: 20
           max-idle: 10
           min-idle: 5
-  threads:
-    virtual:
-      enabled: true
-
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  configuration:
-    map-underscore-to-camel-case: true
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
 
 logging:
   level:
     com.ticketbooking: INFO
 
-feign:
-  sentinel:
-    enabled: true
+

@@ -1,9 +1,4 @@
-server:
-  port: 8082
-
 spring:
-  application:
-    name: ticket-order-service
   cloud:
     nacos:
       discovery:
@@ -39,7 +34,7 @@ spring:
           max-idle: 10
           min-idle: 5
   kafka:
-    bootstrap-servers: localhost:9093
+    bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -59,26 +54,9 @@ spring:
       max-poll-records: 10
       properties:
         spring.json.trusted.packages: "*"
-  threads:
-    virtual:
-      enabled: true
-
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  configuration:
-    map-underscore-to-camel-case: true
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
 
 logging:
   level:
     com.ticketbooking: INFO
     org.springframework.kafka: WARN
 
-feign:
-  sentinel:
-    enabled: true

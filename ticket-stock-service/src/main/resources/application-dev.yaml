@@ -1,9 +1,4 @@
-server:
-  port: 8083
-
 spring:
-  application:
-    name: ticket-stock-service
   cloud:
     nacos:
       discovery:
@@ -39,7 +34,7 @@ spring:
           max-idle: 10
           min-idle: 5
   kafka:
-    bootstrap-servers: localhost:9093
+    bootstrap-servers: localhost:9092
     consumer:
       group-id: stock-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -53,26 +48,9 @@ spring:
     listener:
       concurrency: 5
       ack-mode: manual
-  threads:
-    virtual:
-      enabled: true
 
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  configuration:
-    map-underscore-to-camel-case: true
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info
 
 logging:
   level:
     com.ticketbooking: INFO
     org.springframework.kafka: WARN
-
-feign:
-  sentinel:
-    enabled: true
