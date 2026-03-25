@@ -24,7 +24,7 @@ CONCERT_ID = 1  # 测试用的演唱会ID
 
 # 测试用户 Token (需要替换为实际有效的 token)
 # 可以通过登录接口获取，或直接使用 JWT 工具生成
-TEST_TOKEN = "eyJhbGciOiJIUzM4NCJ9.eyJpc0FkbWluIjpmYWxzZSwidXNlcklkIjo0LCJ1c2VybmFtZSI6InRlc3R1c2VyMiIsInN1YiI6IjQiLCJpYXQiOjE3NzQ0MzE4NzMsImV4cCI6MTc3NDUxODI3M30.KM76Nv5vsXbTVy0kNC57H-lzblkoqcrBo0QCEgvYW8AUX0t9Ak0G5z3w6V9FlcaH"
+TEST_TOKEN = "eyJhbGciOiJIUzM4NCJ9.eyJpc0FkbWluIjpmYWxzZSwidXNlcklkIjozLCJ1c2VybmFtZSI6InVzZXIiLCJzdWIiOiIzIiwiaWF0IjoxNzc0NDUyODYzLCJleHAiOjE3NzQ1MzkyNjN9.0qZBbQJVmMjeqdhrAEBYg6q0Cij5EtOoVP0WOubGqGuIeVN1d93wYo83nIs16xvm"
 # ================================================
 
 
@@ -180,8 +180,8 @@ class TestMultiUserRateLimit:
         """
         # 如需测试多用户，请提供不同的 token
         user_tokens = [
-            # "USER_1_TOKEN",
-            # "USER_2_TOKEN",
+            "eyJhbGciOiJIUzM4NCJ9.eyJpc0FkbWluIjp0cnVlLCJ1c2VySWQiOjIsInVzZXJuYW1lIjoiYWRtaW4iLCJzdWIiOiIyIiwiaWF0IjoxNzc0NDUzMzIyLCJleHAiOjE3NzQ1Mzk3MjJ9.cLvTHm2PMMAHYK2EzgwvXHktts2nu8wVU3XWsJhXR8Nc1ZfOKKXjoIuYqsx12gIw",
+            "eyJhbGciOiJIUzM4NCJ9.eyJpc0FkbWluIjpmYWxzZSwidXNlcklkIjoxLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwic3ViIjoiMSIsImlhdCI6MTc3NDQ1Mjk1MiwiZXhwIjoxNzc0NTM5MzUyfQ.zYLe-5oXRlNOMLb0ZZDKB5pVd-uIfSp9l3RuxXO36f2aZPuPMjDoaX0Nj4yePbiA"
         ]
 
         if len(user_tokens) < 2:
