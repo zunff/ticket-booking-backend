@@ -266,6 +266,106 @@ done
 
 ---
 
+## 11. Gateway URL 资源名称归一化
+
+### 问题描述
+在 Sentinel Dashboard 的 `ticket-gateway-service` 中，资源名称显示为原始 URL（如 `/api/stock/1/3`），而其他微服务（如 `ticket-stock-service`）中已归一化为 `/stock/{concertId}/{gradeId}` 格式。
+
+这导致：
+- 每个 ID 都会生成独立的资源名称
+- 无法统一配置限流规则
+- Dashboard 中资源数量爆炸
+
+### 官方方案分析
+
+Sentinel Gateway 提供了以下资源名称确定方式：
+
+| 方式 | 说明 | 问题 |
+|------|------|------|
+| 路由 ID | 默认使用路由 ID 作为资源名 | 不够细粒度，无法区分不同 API |
+| API 分组 | 配置 `ApiDefinition` | 需要手动为每个 API 配置，不够灵活 |
+| 正则匹配 | `URL_MATCH_STRATEGY_REGEX` | 匹配后的资源名称是固定的分组名，不是归一化的 URL |
+
+### 尝试过的方案
+
+#### 方案一：API 分组（不推荐）
+```java
+// 需要为每个 API 手动配置，维护成本高
+definitions.add(createApiDefinition("api_stock", "/stock/{concertId}/{gradeId}"));
+definitions.add(createApiDefinition("api_concerts", "/concerts/{id}"));
+// ... 每新增一个 API 都要追加配置
+```
+
+#### 方案二：正则匹配 API 分组（不推荐）
+```java
+// 匹配后资源名称变成固定的 "api_with_id"，丢失了具体的 API 信息
+definitions.add(createRegexApiDefinition("api_with_id", "^/.+/\\d+.*$"));
+```
+
+### 最终方案：自定义 GlobalFilter（推荐）
+
+替换默认的 `SentinelGatewayFilter`，在调用 `SphU.entry()` 前对资源名称进行归一化：
+
+```java
+@Configuration
+public class SentinelGatewayConfig {
+
+    // 匹配 URL 中的数字 ID，例如 /api/stock/1/3 -> /api/stock/{id}/{id}
+    private static final Pattern ID_PATTERN = Pattern.compile("/\\d+(?=/|$)");
+
+    @Bean
+    @Order(Ordered.HIGHEST_PRECEDENCE + 1)
+    public GlobalFilter sentinelGatewayFilter() {
+        return new GlobalFilter() {
+            @Override
+            public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+                Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+                if (route == null) {
+                    return chain.filter(exchange);
+                }
+
+                // 归一化资源名称
+                String resourceName = normalizeResourceName(exchange);
+
+                Entry entry = null;
+                try {
+                    ContextUtil.enter("sentinel_gateway_context$$" + route.getId());
+                    entry = SphU.entry(resourceName, ResourceTypeConstants.COMMON_API_GATEWAY, EntryType.IN);
+                    return chain.filter(exchange);
+                } catch (BlockException e) {
+                    return handleBlockRequest(exchange);
+                } finally {
+                    if (entry != null) entry.exit();
+                    ContextUtil.exit();
+                }
+            }
+
+            private String normalizeResourceName(ServerWebExchange exchange) {
+                String path = exchange.getRequest().getURI().getPath();
+                return ID_PATTERN.matcher(path).replaceAll("/{id}");
+            }
+        };
+    }
+}
+```
+
+### 效果对比
+
+| 原始 URL | 归一化后 |
+|----------|----------|
+| `/api/stock/1/3` | `/api/stock/{id}/{id}` |
+| `/api/concerts/123` | `/api/concerts/{id}` |
+| `/api/orders/ORD123` | `/api/orders/ORD123`（非纯数字保持不变）|
+| `/api/admin/concerts/1` | `/api/admin/concerts/{id}` |
+
+### 注意事项
+
+1. **Gateway 适配器版本**：需要使用 `sentinel-spring-cloud-gateway-adapter` 1.8.8+
+2. **资源类型常量**：1.8.8 中使用 `ResourceTypeConstants.COMMON_API_GATEWAY`（不是 `API_GATEWAY_ROUTE_ENTRY`）
+3. **不要同时使用**：自定义 Filter 后，不要再注册 `new SentinelGatewayFilter()`，否则会重复统计
+
+---
+
 ## 总结
 
 | 问题 | 根因 | 解决方案 |
@@ -275,6 +375,7 @@ done
 | 构造函数签名变化 | 版本 API 变化 | 调整参数列表 |
 | 版本管理混乱 | BOM 已管理版本 | 移除父 POM 重复声明 |
 | Dashboard 看不到服务 | 需要流量触发 | 配置 eager: true |
+| Gateway URL 未归一化 | 默认使用原始 URL | 自定义 GlobalFilter 归一化资源名称 |
 
 ---
 

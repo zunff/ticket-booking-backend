@@ -10,6 +10,7 @@ import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
+import com.ticketbooking.common.model.dto.DashboardStatsDTO;
 import com.ticketbooking.common.model.dto.OrderDTO;
 import com.ticketbooking.common.model.dto.StockDTO;
 import com.ticketbooking.common.model.dto.TicketGradeDTO;
@@ -352,5 +353,48 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     public PageResult<OrderVO> getOrderPageByUserId(Long userId, Long current, Long size, Integer status) {
         return getOrderPage(current, size, userId, status, null);
+    }
+
+    @Override
+    public DashboardStatsDTO getDashboardStats() {
+        DashboardStatsDTO stats = new DashboardStatsDTO();
+
+        // 订单总数（统计已支付订单）
+        LambdaQueryWrapper<Order> paidCountWrapper = new LambdaQueryWrapper<Order>()
+                .eq(Order::getStatus, 2);
+        long totalOrders = count(paidCountWrapper);
+        stats.setTotalOrders((int) totalOrders);
+
+        // 总收入（只统计已支付订单，status=2）
+        LambdaQueryWrapper<Order> paidWrapper = new LambdaQueryWrapper<Order>()
+                .eq(Order::getStatus, 2);
+        List<Order> paidOrders = list(paidWrapper);
+        long totalRevenue = paidOrders.stream()
+                .mapToLong(o -> o.getTotalPrice() != null ? o.getTotalPrice() : 0)
+                .sum();
+        stats.setTotalRevenue(totalRevenue);
+
+        // 今日订单（已支付）
+        LocalDateTime todayStart = LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0);
+        LambdaQueryWrapper<Order> todayWrapper = new LambdaQueryWrapper<Order>()
+                .ge(Order::getCreateTime, todayStart)
+                .eq(Order::getStatus, 2);
+        long todayOrders = count(todayWrapper);
+        stats.setTodayOrders((int) todayOrders);
+
+        // 今日收入（已支付订单，status=2）
+        LambdaQueryWrapper<Order> todayPaidWrapper = new LambdaQueryWrapper<Order>()
+                .ge(Order::getCreateTime, todayStart)
+                .eq(Order::getStatus, 2);
+        List<Order> todayPaidOrders = list(todayPaidWrapper);
+        long todayRevenue = todayPaidOrders.stream()
+                .mapToLong(o -> o.getTotalPrice() != null ? o.getTotalPrice() : 0)
+                .sum();
+        stats.setTodayRevenue(todayRevenue);
+
+        log.info("Dashboard stats: totalOrders={}, totalRevenue={}, todayOrders={}, todayRevenue={}",
+                totalOrders, totalRevenue, todayOrders, todayRevenue);
+
+        return stats;
     }
 }

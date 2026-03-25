@@ -2,6 +2,7 @@ package com.ticketbooking.order.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ticketbooking.common.model.PageResult;
+import com.ticketbooking.common.model.dto.DashboardStatsDTO;
 import com.ticketbooking.common.model.dto.OrderDTO;
 import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
@@ -44,4 +45,9 @@ public interface OrderService extends IService<Order> {
      * 分页查询用户订单（带关联信息）
      */
     PageResult<OrderVO> getOrderPageByUserId(Long userId, Long current, Long size, Integer status);
+
+    /**
+     * 获取仪表盘订单统计数据
+     */
+    DashboardStatsDTO getDashboardStats();
 }
