@@ -4,7 +4,6 @@ services:
     container_name: ticket-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: ticket_booking
     ports:
       - "3306:3306"
     volumes:
