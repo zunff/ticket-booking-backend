@@ -38,4 +38,15 @@ logging:
   level:
     com.ticketbooking: INFO
 
-
+xxl:
+  job:
+    admin:
+      addresses: http://localhost:8880/xxl-job-admin
+    executor:
+      appname: ticket-executor
+      address: ""                                     # 留空用 ip + port
+      ip: ""                                          # 留空自动获取（推荐容器环境）
+      port: 0                                         # 0 表示自动获取随机端口（推荐）
+      logpath: ./logs/xxl-job
+      logretentiondays: 30
+    accessToken: default_token

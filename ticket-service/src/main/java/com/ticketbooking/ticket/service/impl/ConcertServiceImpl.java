@@ -7,9 +7,11 @@ import com.ticketbooking.common.enums.ConcertStatus;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
+import com.ticketbooking.common.model.dto.ConcertDTO;
 import com.ticketbooking.common.model.dto.StockDTO;
 import com.ticketbooking.ticket.client.OrderServiceClient;
 import com.ticketbooking.ticket.client.StockServiceClient;
+import com.ticketbooking.ticket.client.XxlJobAdminClient;
 import com.ticketbooking.ticket.converter.ConcertConverter;
 import com.ticketbooking.ticket.entity.Concert;
 import com.ticketbooking.ticket.entity.TicketGrade;
@@ -32,6 +34,16 @@ import java.util.stream.Collectors;
 @Service
 public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> implements ConcertService {
 
+    /**
+     * 预热提前时间（分钟）
+     */
+    private static final int PREHEAT_ADVANCE_MINUTES = 5;
+
+    /**
+     * 预热任务 JobHandler 名称
+     */
+    private static final String PREHEAT_JOB_HANDLER = "concertCachePreheat";
+
     @Resource
     private ConcertConverter concertConverter;
 
@@ -44,12 +56,19 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
     @Resource
     private OrderServiceClient orderServiceClient;
 
+    @Resource
+    private XxlJobAdminClient xxlJobAdminClient;
+
     @Override
     public Concert createConcert(Concert concert) {
         // 状态根据时间动态计算，默认为已关闭
         concert.setStatus(ConcertStatus.CLOSED.getCode());
         save(concert);
         log.info("Concert created: id={}, name={}", concert.getId(), concert.getName());
+
+        // 创建预热任务
+        schedulePreheatJob(concert);
+
         return concert;
     }
 
@@ -62,6 +81,14 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
         updateById(concert);
         log.info("Concert updated: id={}", concert.getId());
+
+        // 如果开售时间有变化，更新预热任务
+        if (concert.getStartSaleTime() != null &&
+            (existing.getStartSaleTime() == null ||
+             !existing.getStartSaleTime().equals(concert.getStartSaleTime()))) {
+            schedulePreheatJob(concert);
+        }
+
         return concert;
     }
 
@@ -170,7 +197,78 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     public void deleteConcert(Long concertId) {
+        // 删除预热任务
+        removePreheatJob(concertId);
+
         removeById(concertId);
         log.info("Concert deleted: id={}", concertId);
+    }
+
+    @Override
+    public ConcertDTO getConcertDTOById(Long id) {
+        Concert concert = getById(id);
+        if (concert == null) {
+            return null;
+        }
+
+        ConcertDTO dto = new ConcertDTO();
+        dto.setId(concert.getId());
+        dto.setName(concert.getName());
+        dto.setVenue(concert.getVenue());
+        dto.setShowTime(concert.getShowTime());
+        dto.setStartSaleTime(concert.getStartSaleTime());
+        dto.setEndSaleTime(concert.getEndSaleTime());
+        dto.setPurchaseLimit(concert.getPurchaseLimit() != null ? concert.getPurchaseLimit() : 1);
+        dto.setStatus(concert.getStatus());
+
+        return dto;
+    }
+
+    /**
+     * 调度预热任务
+     */
+    private void schedulePreheatJob(Concert concert) {
+        if (concert.getStartSaleTime() == null) {
+            log.debug("演唱会没有设置开售时间，跳过预热任务: concertId={}", concert.getId());
+            return;
+        }
+
+        LocalDateTime preheatTime = concert.getStartSaleTime().minusMinutes(PREHEAT_ADVANCE_MINUTES);
+        LocalDateTime now = LocalDateTime.now();
+
+        if (preheatTime.isBefore(now)) {
+            log.debug("预热时间已过，跳过任务创建: concertId={}, preheatTime={}", concert.getId(), preheatTime);
+            return;
+        }
+
+        try {
+            Integer jobId = xxlJobAdminClient.addOrUpdateOnceJob(
+                    PREHEAT_JOB_HANDLER,
+                    String.valueOf(concert.getId()),
+                    preheatTime
+            );
+            if (jobId != null) {
+                log.info("预热任务创建/更新成功: concertId={}, preheatTime={}, jobId={}",
+                        concert.getId(), preheatTime, jobId);
+            } else {
+                log.warn("预热任务创建/更新失败: concertId={}", concert.getId());
+            }
+        } catch (Exception e) {
+            log.error("预热任务调度异常: concertId={}", concert.getId(), e);
+        }
+    }
+
+    /**
+     * 删除预热任务
+     */
+    private void removePreheatJob(Long concertId) {
+        try {
+            boolean success = xxlJobAdminClient.removeJob(String.valueOf(concertId));
+            if (success) {
+                log.info("预热任务删除成功: concertId={}", concertId);
+            }
+        } catch (Exception e) {
+            log.warn("删除预热任务异常: concertId={}", concertId, e);
+        }
     }
 }

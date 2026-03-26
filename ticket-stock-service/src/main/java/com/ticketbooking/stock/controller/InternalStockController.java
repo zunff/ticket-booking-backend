@@ -25,24 +25,6 @@ public class InternalStockController {
         return Result.success(stockService.getStockDTOsByConcertId(concertId));
     }
 
-    @PostMapping("/decrement")
-    public Result<Integer> decrementStock(
-            @RequestParam Long concertId,
-            @RequestParam Long gradeId,
-            @RequestParam Integer quantity,
-            @RequestParam String orderNo) {
-        return Result.success(stockService.decrementStock(concertId, gradeId, quantity, orderNo));
-    }
-
-    @PostMapping("/increment")
-    public Result<Integer> incrementStock(
-            @RequestParam Long concertId,
-            @RequestParam Long gradeId,
-            @RequestParam Integer quantity,
-            @RequestParam String orderNo) {
-        return Result.success(stockService.incrementStock(concertId, gradeId, quantity, orderNo));
-    }
-
     @PostMapping("/init")
     public Result<Void> initStock(
             @RequestParam Long concertId,

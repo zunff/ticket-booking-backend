@@ -2,6 +2,7 @@ package com.ticketbooking.ticket.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ticketbooking.common.model.PageResult;
+import com.ticketbooking.common.model.dto.ConcertDTO;
 import com.ticketbooking.ticket.entity.Concert;
 import com.ticketbooking.ticket.model.qo.ConcertQueryQO;
 import com.ticketbooking.ticket.model.vo.ConcertDetailWithStockVO;
@@ -58,4 +59,9 @@ public interface ConcertService extends IService<Concert> {
      * 删除演唱会
      */
     void deleteConcert(Long concertId);
+
+    /**
+     * 获取演唱会DTO（供内部服务调用）
+     */
+    ConcertDTO getConcertDTOById(Long id);
 }

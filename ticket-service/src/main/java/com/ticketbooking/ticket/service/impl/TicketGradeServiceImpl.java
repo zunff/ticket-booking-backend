@@ -1,5 +1,6 @@
 package com.ticketbooking.ticket.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
@@ -17,6 +18,7 @@ import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -28,7 +30,7 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
 
     @Resource
     private StockServiceClient stockServiceClient;
-    
+
     @Override
     public TicketGrade createTicketGrade(TicketGrade ticketGrade) {
         save(ticketGrade);
@@ -50,12 +52,13 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
 
         return ticketGrade;
     }
-    
+
     @Override
     public List<TicketGrade> getGradesByConcertId(Long concertId) {
-        return baseMapper.findByConcertId(concertId);
+        return list(new LambdaQueryWrapper<TicketGrade>()
+                .eq(TicketGrade::getConcertId, concertId));
     }
-    
+
     @Override
     public TicketGrade getGradeById(Long id) {
         TicketGrade grade = getById(id);
@@ -64,7 +67,7 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
         }
         return grade;
     }
-    
+
     public TicketGradeDTO getGradeWithConcertName(Long id) {
         TicketGrade grade = getGradeById(id);
         if (grade == null) {

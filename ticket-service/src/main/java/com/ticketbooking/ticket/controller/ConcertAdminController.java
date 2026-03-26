@@ -9,6 +9,7 @@ import com.ticketbooking.ticket.entity.TicketGrade;
 import com.ticketbooking.ticket.model.vo.ConcertDetailWithStockVO;
 import com.ticketbooking.ticket.model.vo.ConcertVO;
 import com.ticketbooking.ticket.model.vo.TicketGradeVO;
+import com.ticketbooking.ticket.service.CachePreheatService;
 import com.ticketbooking.ticket.service.ConcertService;
 import com.ticketbooking.ticket.service.TicketGradeService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +25,7 @@ public class ConcertAdminController {
     private final ConcertService concertService;
     private final TicketGradeService ticketGradeService;
     private final ConcertConverter concertConverter;
+    private final CachePreheatService cachePreheatService;
 
     @PostMapping
     @RequireAuth(Role.ADMIN)
@@ -68,5 +70,15 @@ public class ConcertAdminController {
     @RequireAuth(Role.ADMIN)
     public Result<List<TicketGradeVO>> getGrades(@PathVariable Long concertId) {
         return Result.success(concertConverter.toGradeVOList(ticketGradeService.getGradesByConcertId(concertId)));
+    }
+
+    /**
+     * 手动预热演唱会缓存
+     */
+    @PostMapping("/{concertId}/preheat")
+    @RequireAuth(Role.ADMIN)
+    public Result<String> preheatCache(@PathVariable Long concertId) {
+        cachePreheatService.preheatConcertCache(concertId);
+        return Result.success("缓存预热成功");
     }
 }

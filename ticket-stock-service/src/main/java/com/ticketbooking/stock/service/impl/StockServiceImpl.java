@@ -56,55 +56,17 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
         if (updated > 0) {
             int afterStock = beforeStock - quantity;
             recordStockLog(concertId, gradeId, orderNo, -quantity, beforeStock, afterStock, "DECREMENT", "订单扣减库存");
-
-            // 只有 key 存在时才更新 Redis
-            String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-            if (redisUtils.hasKey(stockKey)) {
-                redisUtils.set(stockKey, String.valueOf(afterStock));
-            }
-
-            log.info("Stock decremented: concertId={}, gradeId={}, quantity={}, before={}, after={}",
-                    concertId, gradeId, quantity, beforeStock, afterStock);
+            log.info("Stock decremented: concertId={}, gradeId={}, quantity={}, before={}, after={}", concertId, gradeId, quantity, beforeStock, afterStock);
         }
-
-        return updated;
-    }
-    
-    @Override
-    @Transactional
-    public int incrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo) {
-        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
-        if (stock == null) {
-            log.warn("Stock not found: concertId={}, gradeId={}", concertId, gradeId);
-            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-        }
-
-        int beforeStock = stock.getAvailableStock();
-
-        int updated = baseMapper.incrementStock(concertId, gradeId, quantity);
-        if (updated == 0) {
-            log.warn("Stock increment failed: concertId={}, gradeId={}", concertId, gradeId);
-            throw new BusinessException(ErrorCode.STOCK_ROLLBACK_FAILED);
-        }
-
-        int afterStock = beforeStock + quantity;
-        recordStockLog(concertId, gradeId, orderNo, quantity, beforeStock, afterStock, "INCREMENT", "订单回滚库存");
-
-        // 只有 key 存在时才更新 Redis
-        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        if (redisUtils.hasKey(stockKey)) {
-            redisUtils.set(stockKey, String.valueOf(afterStock));
-        }
-
-        log.info("Stock incremented: concertId={}, gradeId={}, quantity={}, before={}, after={}",
-                concertId, gradeId, quantity, beforeStock, afterStock);
 
         return updated;
     }
     
     @Override
     public Stock getStockByConcertAndGrade(Long concertId, Long gradeId) {
-        return baseMapper.findByConcertAndGrade(concertId, gradeId);
+        return getOne(new LambdaQueryWrapper<Stock>()
+                .eq(Stock::getConcertId, concertId)
+                .eq(Stock::getGradeId, gradeId));
     }
     
     @Override
@@ -123,17 +85,6 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
 
         redisUtils.setEx(stockKey, String.valueOf(stock.getAvailableStock()), CACHE_EXPIRE_SECONDS);
         return stock.getAvailableStock();
-    }
-    
-    @Override
-    public void syncStockToRedis(Long concertId, Long gradeId) {
-        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
-        if (stock != null) {
-            String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-            redisUtils.set(stockKey, String.valueOf(stock.getAvailableStock()));
-            log.info("Stock synced to Redis: concertId={}, gradeId={}, stock={}", 
-                    concertId, gradeId, stock.getAvailableStock());
-        }
     }
     
     @Override

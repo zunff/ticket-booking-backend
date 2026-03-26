@@ -2,11 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.ticketbooking.stock.mapper.StockMapper">
 
-    <select id="findByConcertAndGrade" resultType="com.ticketbooking.stock.entity.Stock">
-        SELECT * FROM stock 
-        WHERE concert_id = #{concertId} AND grade_id = #{gradeId}
-    </select>
-
+    <!-- 乐观锁扣减库存，原子操作 -->
     <update id="decrementStock">
         UPDATE stock
         SET available_stock = available_stock - #{quantity},
@@ -17,14 +13,4 @@
           AND available_stock &gt;= #{quantity}
           AND version = #{version}
     </update>
-
-    <update id="incrementStock">
-        UPDATE stock
-        SET available_stock = available_stock + #{quantity},
-            version = version + 1,
-            updated_at = NOW()
-        WHERE concert_id = #{concertId}
-          AND grade_id = #{gradeId}
-    </update>
-
 </mapper>

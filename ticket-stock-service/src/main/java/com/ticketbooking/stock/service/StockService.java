@@ -1,7 +1,6 @@
 package com.ticketbooking.stock.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ticketbooking.common.model.dto.StockDTO;
 import com.ticketbooking.stock.entity.Stock;
@@ -14,13 +13,9 @@ public interface StockService extends IService<Stock> {
 
     int decrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo);
 
-    int incrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo);
-
     Stock getStockByConcertAndGrade(Long concertId, Long gradeId);
 
     Integer getAvailableStock(Long concertId, Long gradeId);
-
-    void syncStockToRedis(Long concertId, Long gradeId);
 
     List<StockLog> getStockLogs(Long concertId, Long gradeId);
 

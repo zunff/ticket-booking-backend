@@ -7,12 +7,13 @@ import com.ticketbooking.ticket.entity.TicketGrade;
 import java.util.List;
 
 public interface TicketGradeService extends IService<TicketGrade> {
-    
+
     TicketGrade createTicketGrade(TicketGrade ticketGrade);
 
     List<TicketGrade> getGradesByConcertId(Long concertId);
-    
+
     TicketGrade getGradeById(Long id);
-    
+
     TicketGradeDTO getGradeWithConcertName(Long id);
+
 }

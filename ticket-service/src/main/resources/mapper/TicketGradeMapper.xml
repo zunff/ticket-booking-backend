@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.ticketbooking.ticket.mapper.TicketGradeMapper">
-
-    <select id="findByConcertId" resultType="com.ticketbooking.ticket.entity.TicketGrade">
-        SELECT * FROM ticket_grade WHERE concert_id = #{concertId}
-    </select>
-
-</mapper>
