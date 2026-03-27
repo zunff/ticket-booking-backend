@@ -6,9 +6,9 @@
 
 ```
 ticket-booking-backend/
-├── ticket-booking-common/          # 公共模块
+├── ticket-booking-common/          # 公共模块（缓存、工具、注解）
 ├── ticket-user-service/             # 用户服务 (端口: 8081)
-├── ticket-service/                 # 票务服务 (端口: 8080)
+├── ticket-service/                 # 演唱会服务 (端口: 8080)
 ├── ticket-order-service/            # 订单服务 (端口: 8082)
 ├── ticket-stock-service/            # 库存服务 (端口: 8083)
 ├── ticket-gateway-service/          # 网关服务 (端口: 9000)
@@ -20,11 +20,11 @@ ticket-booking-backend/
 
 | 服务 | 端口 | 职责 |
 |------|------|------|
-| ticket-gateway-service | 9000 | API 网关，统一入口，路由转发，鉴权 |
-| ticket-user-service | 8081 | 用户管理，登录认证，JWT 签发 |
-| ticket-service | 8080 | 演唱会管理，票价档位管理 |
-| ticket-order-service | 8082 | 订单管理，订单查询 |
-| ticket-stock-service | 8083 | 库存管理，库存扣减/回滚，库存日志 |
+| ticket-gateway-service | 9000 | API 网关、JWT 鉴权、Sticky Session 路由 |
+| ticket-user-service | 8081 | 用户管理、登录认证 |
+| ticket-service | 8080 | 演唱会管理、票价档位、缓存预热 |
+| ticket-order-service | 8082 | 订单创建、抢票入口 |
+| ticket-stock-service | 8083 | 库存管理、Kafka 消费、DB 库存扣减 |
 
 ## 技术栈
 
@@ -36,223 +36,149 @@ ticket-booking-backend/
 | API 网关 | Spring Cloud Gateway | 4.x |
 | 服务调用 | OpenFeign | 4.x |
 | ORM | MyBatis-Plus | 3.5.5 |
-| 缓存 | Redis | 7 |
+| 本地缓存 | Caffeine | 3.x |
+| 分布式缓存 | Redis | 7 |
 | 消息队列 | Kafka | 7.5.0 |
 | 数据库 | MySQL | 8.0 |
+| 定时任务 | XXL-Job | 2.4.0 |
 
-## 高并发抢票方案对比
+## 核心流程：Lua + Kafka + DB 最终一致性
 
-### 方案一：数据库悲观锁 (SELECT FOR UPDATE)
-
+```plaintext
+抢票流程架构
+├─ 客户端请求
+├─ Redis Lua 原子操作
+│  ├─ 检查用户限购（Hash 结构）
+│  ├─ 检查库存是否充足
+│  ├─ 原子扣减库存（HINCRBY）
+│  └─ 返回预抢票结果
+├─ Kafka 消息队列
+│  ├─ 异步创建订单
+│  └─ 异步扣减DB库存
+└─ MySQL 数据库
+   ├─ 乐观锁扣减
+   └─ 消费失败回滚 Redis
 ```
-请求 → 数据库 SELECT FOR UPDATE → 扣减库存 → 创建订单 → 返回
-```
-
-**优点**：实现简单，数据一致性有保障
-
-**缺点**：所有请求串行执行，性能极差，数据库连接池容易耗尽
-
-**QPS**: < 50
-
----
-
-### 方案二：分布式锁 + Redis 原子操作
-
-```
-请求 → 获取分布式锁 → Redis 扣库存 → 创建订单 → 释放锁 → 返回
-```
-
-**优点**：保护临界区，防止超卖
-
-**缺点**：锁竞争严重，大量请求等待，锁粒度大，并发度低
-
-**QPS**: ~30
-
----
-
-### 方案三：Redis Lua 脚本 + MQ 异步处理 ⭐ 当前实现
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        当前方案架构                              │
-│                                                                 │
-│   ┌─────────┐     ┌─────────────────────────────────────────┐  │
-│   │  请求   │ ──→ │           Redis Lua 原子操作             │  │
-│   └─────────┘     │  1. 检查用户是否已购买 (SETNX)           │  │
-│                   │  2. 检查库存是否充足                      │  │
-│                   │  3. 原子扣减库存                          │  │
-│                   │  4. 返回预抢票结果                        │  │
-│                   └─────────────────────────────────────────┘  │
-│                              │                                  │
-│                              ↓                                  │
-│                   ┌─────────────────────────────────────────┐  │
-│                   │              Kafka 消息队列              │  │
-│                   │        (异步创建订单 + 扣减DB库存)        │  │
-│                   └─────────────────────────────────────────┘  │
-│                              │                                  │
-│                              ↓                                  │
-│                   ┌─────────────────────────────────────────┐  │
-│                   │              MySQL 数据库                │  │
-│                   │        (最终一致性，异步写入)             │  │
-│                   └─────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**优点**：
-- **无锁设计**：Lua 脚本在 Redis 中原子执行，无需分布式锁
-- **极高并发**：Redis 单线程也能支持 10万+ QPS
-- **削峰填谷**：MQ 异步处理保护数据库
-- **虚拟线程**：Java 21 虚拟线程进一步提升并发处理能力
-- **用户体验好**：快速返回抢票结果，订单异步生成
-
-**QPS**: 500+ (预期)
-
----
-
-### 方案对比总结
-
-| 方案 | QPS | 实现复杂度 | 数据一致性 | 适用场景 |
-|------|-----|-----------|-----------|---------|
-| 数据库悲观锁 | <50 | 低 | 强一致 | 低并发 |
-| 分布式锁 | ~30 | 中 | 强一致 | 中等并发 |
-| **Lua + MQ** | **500+** | 高 | 最终一致 | **超高并发** |
-
-## 数据库设计
-
-### ticket_ticket 数据库
-- `concerts` - 演唱会场次表
-- `ticket_grade` - 票价档位表
-
-### ticket_stock 数据库
-- `stock` - 库存表
-- `stock_log` - 库存日志表
-
-### ticket_order 数据库
-- `orders` - 订单表
-
-### ticket_user 数据库
-- `users` - 用户表
 
 ## 快速开始
 
-### 开发环境启动
+### 前置要求
+
+- **JDK 21**
+- **Maven 3.9+**
+- **Mac 环境需安装 Docker Desktop**
+
+### 启动开发环境
 
 ```bash
-# 1. 启动所有服务
+# 1. 启动基础设施（MySQL、Redis、Kafka、Nacos、Sentinel、XXL-Job）
+docker-compose -f docker-compose.dev.yaml up -d
+
+# 2. 等待服务就绪后，启动微服务
 bash sh/start-dev.sh
 
-# 2. 停止所有服务
+# 3. 停止所有服务
 bash sh/stop-all.sh
+
+# 4. 停止基础设施
+docker-compose -f docker-compose.dev.yaml down
 ```
 
-### API 网关访问
+### 服务地址
 
-所有请求通过网关统一访问：`http://localhost:9000`
+| 服务 | 地址                                  | 说明 |
+|------|-------------------------------------|------|
+| API 网关 | http://localhost:9000               | 所有请求入口 |
+| Nacos 控制台 | http://localhost:8828/nacos         | 服务注册中心 |
+| Sentinel 控制台 | http://localhost:8858               | 限流配置 (admin/admin123) |
+| XXL-Job 控制台 | http://localhost:8880/xxl-job-admin | 定时任务 (admin/123456) |
 
 ## API 接口
 
-### 用户相关
+### 用户服务 `/api/users`
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/users/login` | POST | 用户登录，返回 JWT Token |
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | `/login` | 用户登录，返回 JWT | 否 |
+| POST | `/register` | 用户注册 | 否 |
+| GET | `/{id}` | 获取用户信息 | 是 |
+| PUT | `/{id}` | 更新用户信息 | 是 |
 
-### 演唱会相关
+### 演唱会服务 `/api/concerts`
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/concerts` | GET | 获取演唱会列表（分页） |
-| `/api/concerts/{id}` | GET | 获取演唱会详情（包含档位和库存） |
-| `/api/concerts/on-sale` | GET | 获取在售演唱会列表（分页） |
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| GET | `/` | 演唱会列表（分页） | 否 |
+| GET | `/{id}` | 演唱会详情（含库存、用户购买数） | 可选 |
 
-### 订单相关
+### 订单服务 `/api/orders`
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/orders/book` | POST | 创建订单（抢票） |
-| `/api/orders/user/{userId}` | GET | 获取用户订单列表（分页） |
-| `/api/orders/{orderNo}` | GET | 获取订单详情 |
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| POST | `/book` | **抢票**（限流） | 是 |
+| GET | `/{orderNo}` | 订单详情 | 是 |
+| GET | `/user/{userId}` | 用户订单列表 | 是 |
 
-### 库存相关
+### 管理接口 `/api/admin/*`
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/stock/{concertId}/{gradeId}` | GET | 获取库存 |
+需管理员权限，包括：演唱会 CRUD、档位管理、库存调整等。
 
-### 管理员接口
+---
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| `/api/admin/concerts` | POST | 创建演唱会 |
-| `/api/admin/concerts/{id}` | PUT | 更新演唱会 |
-| `/api/admin/concerts/{id}` | DELETE | 删除演唱会 |
-| `/api/admin/concerts/{id}/start-sale` | POST | 开始售票 |
-| `/api/admin/concerts/{id}/end-sale` | POST | 结束售票 |
-| `/api/admin/concerts/{concertId}/grades` | POST | 创建档位 |
-| `/api/admin/stock/adjust` | POST | 调整库存 |
-| `/api/admin/stock/logs/{concertId}/{gradeId}` | GET | 获取库存日志 |
+## 实现要点
 
-## 性能测试结果
-
-测试配置：2000 请求，200 并发，1000 库存，3个Pod副本
-
-| 指标 | Kafka 方案 |
-|------|-----------|
-| 成功抢票 | ___ 张 |
-| QPS | ___ |
-| 平均响应时间 | ___ ms |
-| 最小响应时间 | ___ ms |
-| 最大响应时间 | ___ ms |
-| 成功率 | ___ % |
-
-### 测试环境
-
-- **本地开发环境**: macOS, Docker Desktop
-- **数据库**: MySQL 8.0 (Docker)
-- **缓存**: Redis 7 (Docker)
-- **消息队列**: Kafka 7.5.0 (Docker)
-- **JDK**: Java 21 (虚拟线程启用)
-
-## 核心实现
-
-### Redis Lua 脚本
+### 1. Redis Lua 抢票脚本
 
 ```lua
--- 原子抢票操作
-local stockKey = KEYS[1]
-local userTicketKey = KEYS[2]
-local userId = ARGV[1]
-local quantity = tonumber(ARGV[2])
+-- 演唱会级别限购 (Hash 结构版本)
+-- KEYS[1]: stockHashKey, KEYS[2]: userPurchaseKey, KEYS[3]: limitKey
+-- ARGV: userId, quantity, gradeId, expireSeconds
 
--- 检查用户是否已购买
-if redis.call('EXISTS', userTicketKey) == 1 then
-    return -1  -- 已购买
-end
+-- 返回: 1=成功, -2=票务不存在, -3=库存不足, -4=限购配置不存在, -5=超出限购
+local stock = tonumber(redis.call('HGET', stockHashKey, gradeId))
+if stock == nil then return -2 end
+if stock < quantity then return -3 end
 
--- 检查库存
-local stock = tonumber(redis.call('GET', stockKey) or '0')
-if stock == 0 then
-    return -2  -- 票务不存在
-end
-
-if stock < quantity then
-    return -3  -- 库存不足
-end
-
--- 扣减库存
-redis.call('DECRBY', stockKey, quantity)
-redis.call('SET', userTicketKey, userId)
-
-return 1  -- 成功
+redis.call('HINCRBY', stockHashKey, gradeId, -quantity)
+redis.call('INCRBY', userPurchaseKey, quantity)
+return 1
 ```
 
-### Kafka 消息处理流程
+**文件**: `ticket-order-service/.../config/BookingLuaScript.java`
 
-1. **生产者**：抢票成功后发送订单消息到 Kafka Topic
-2. **消费者**：异步消费消息，创建订单并扣减数据库库存
-3. **失败处理**：消费失败时回滚 Redis 库存，删除用户购买记录
+### 2. Kafka 消费失败回滚
 
-### Java 21 虚拟线程配置
+消费失败分两种情况：
+- **库存真正不足**：不回滚 Redis，标记订单失败
+- **限购校验失败**：回滚 Redis（HINCRBY 恢复库存、减少用户购买计数）
+
+**文件**: `ticket-stock-service/.../mq/OrderMessageConsumer.java`
+
+### 3. 多级缓存 (Caffeine + Redis)
+
+```
+L1 (Caffeine) → L2 (Redis) → DB
+       ↓              ↓
+   本地缓存      分布式缓存
+   (Sticky)     (共享)
+```
+
+- **缓存类型**: 用户信息、演唱会详情、票价档位
+- **库存不加 Caffeine**（高频写、需强一致）
+- **缓存失效**: Redis Pub/Sub 广播通知所有实例
+
+**文件**: `ticket-booking-common/.../cache/MultiLevelCacheService.java`
+
+### 4. 网关 Sticky Session (一致性哈希)
+
+```
+已登录用户 → 一致性哈希 + 虚拟节点 → 固定实例（本地缓存命中）
+未登录用户 → RoundRobin 轮询
+```
+
+**文件**: `ticket-gateway-service/.../config/UserIdStickyLoadBalancer.java`
+
+### 5. Java 21 虚拟线程
 
 ```yaml
 spring:
@@ -261,109 +187,24 @@ spring:
       enabled: true
 ```
 
-## 项目亮点
+### 6. Sentinel 限流
 
-1. **微服务架构**：服务职责清晰，易于扩展和维护
-2. **Java 21 虚拟线程**：大幅提升并发处理能力，减少线程切换开销
-3. **Redis Lua 原子操作**：无锁设计，避免分布式锁竞争
-4. **Kafka 消息队列**：高吞吐量，支持分区和副本，适合大规模分布式系统
-5. **服务间解耦**：通过 OpenFeign 实现服务间调用，降低耦合度
-6. **统一网关**：API 网关统一入口，便于鉴权和路由管理
-7. **数据库分离**：每个服务管理自己的数据，符合微服务最佳实践
+- `@UserRateLimit` 注解：单用户请求频率限制
+- 资源名：`ClassName:methodName`
 
 ---
 
-## TODO (待实现功能)
+## TODO
 
-### 🔴 高优先级 - 核心高并发能力完善
+### 🟡 中优先级
 
-#### 1. Sentinel 限流降级
-- [x] 接口级别限流规则配置（抢票接口 QPS 限制）
-- [x] 用户维度限流（单用户请求频率限制，防刷票）
+- [ ] Dashboard 销量/销售额从订单服务获取真实数据 (`DashboardServiceImpl.java:86, 101`)
 - [ ] 熔断降级策略（Redis/Kafka 异常时的降级方案）
-- [x] 热点参数限流（针对热门演唱会 ID 的限流）
+- [ ] 监控面板：Prometheus + Grafana
 
-**预期收益**：保护后端服务，防止恶意刷票，提升系统稳定性
+### 🟢 低优先级
 
-#### 2. Caffeine 本地缓存
-- [ ] 演唱会详情本地缓存（减少 Redis 查询）
-- [ ] 用户信息本地缓存
-- [ ] 缓存穿透/击穿/雪崩防护
-- [ ] 缓存命中率监控
-
-**预期收益**：减少 60%+ Redis 访问，查询响应时间降低至 10ms 以内
-
-#### 3. 性能调优与压测优化
-- [ ] QPS 从当前优化至 500+ （瓶颈分析与优化）
-- [ ] 数据库连接池调优
-- [ ] Redis 连接池调优
-- [ ] Kafka 生产者/消费者参数调优
-- [ ] 虚拟线程池参数优化
-
-**预期收益**：达到真正的"高并发"性能标准
-
-#### 4. 完善库存架构
-- [ ] 第一层（预热）：XXL-Job 定时任务，活动开始前强制写入 Redis（主力）
-- [ ] 第二层（兜底）：接口内部双检锁 + 分布式锁 + 短暂重试（防止 Redis 意外丢失 Key）
-- [ ] 第三层（底线）：数据库层面加乐观锁（`update stock set available_stock = available_stock - 1 where id = 1 and available_stock > 0`），防止 Redis 逻辑出 Bug 导致超卖（最后一道救命线）
-
-**预期收益**：构建多层级库存防护体系，确保高并发下数据零超卖
+- [ ] 性能压测与参数调优
+- [ ] 库存分段/分片设计
 
 ---
-
-### 🟡 中优先级 - 架构完整性
-
-#### 5. 监控与可观测性
-- [ ] Prometheus + Grafana 监控面板
-- [ ] 接口响应时间 P50/P95/P99 分布
-- [ ] Redis 命中率统计
-- [ ] Kafka 消费延迟监控
-- [ ] JVM 虚拟线程监控
-
-**预期收益**：系统可观测，性能问题可追溯
-
-#### 6. 库存分段/分片设计
-- [ ] 单库存拆分为多段（如 1000 库存 → 10 段 100）
-- [ ] 减少单 Key 热点竞争
-- [ ] 分段扣减后的合并策略
-
-**预期收益**：进一步提升并发能力 2-3 倍
-
-#### 7. 数据库优化
-- [ ] MySQL 读写分离架构
-- [ ] Order 表分表策略（按用户 ID 哈希）
-- [ ] 索引优化与慢查询分析
-
-**预期收益**：支撑更大规模数据量
-
----
-
-### 🟢 低优先级 - 功能完善
-
-#### 8. 分布式事务与补偿
-- [ ] RocketMQ/RabbitMQ 事务消息方案（备选）
-- [ ] 订单状态机实现
-- [ ] 失败订单自动重试机制
-- [ ] 库存回滚补偿日志
-
-#### 9. 安全增强
-- [ ] 接口防重放攻击（请求签名 + 时间戳）
-- [ ] 抢票验证码（防止脚本抢票）
-- [ ] 风控规则识别异常用户
-
-#### 10. 业务场景完善
-- [ ] 热点票优先级队列（VIP 用户优先）
-- [ ] 抢票排队/预约机制
-- [ ] 抢票前预售/预热功能
-
----
-
-### 📊 性能目标
-
-| 指标 | 当前 | 目标 |
-|------|------|------|
-| QPS | ___ | 500+ |
-| 平均响应时间 | ___ ms | < 100ms |
-| P99 响应时间 | ___ ms | < 500ms |
-| Redis 命中率 | - | > 90% |
-| 支持并发用户 | ___ | 1000+ |

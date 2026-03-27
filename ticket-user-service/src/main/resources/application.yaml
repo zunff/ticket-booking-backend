@@ -10,6 +10,11 @@ spring:
     virtual:
       enabled: true
 
+# 用户多级缓存
+multi-level-cache:
+  user:
+    enabled: true
+
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   configuration:

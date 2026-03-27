@@ -8,6 +8,11 @@ spring:
     virtual:
       enabled: true
 
+# 演唱会多级缓存（演唱会详情、票价档位）
+multi-level-cache:
+  concert:
+    enabled: true
+
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   configuration:

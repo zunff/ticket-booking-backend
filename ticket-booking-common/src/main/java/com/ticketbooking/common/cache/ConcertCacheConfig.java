@@ -16,28 +16,17 @@ import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 多级缓存配置
+ * 演唱会缓存配置
+ *
+ * 启用方式：在 application.yaml 中配置 multi-level-cache.concert.enabled=true
+ * 适用服务：ticket-service
  */
 @Configuration
 @EnableCaching
 @ConditionalOnClass(Caffeine.class)
-@ConditionalOnProperty(name = "spring.data.redis.host")
-public class MultiLevelCacheConfig {
+@ConditionalOnProperty(name = "multi-level-cache.concert.enabled", havingValue = "true")
+public class ConcertCacheConfig {
 
-    /**
-     * 用户信息 Caffeine Cache
-     */
-    @Bean
-    public Caffeine<Object, Object> userCaffeine() {
-        return Caffeine.newBuilder()
-                .maximumSize(CacheConstant.USER_CACHE_MAX_SIZE)
-                .expireAfterWrite(CacheConstant.USER_CACHE_EXPIRE_MINUTES, TimeUnit.MINUTES)
-                .recordStats();
-    }
-
-    /**
-     * 演唱会信息 Caffeine Cache
-     */
     @Bean
     public Caffeine<Object, Object> concertCaffeine() {
         return Caffeine.newBuilder()
@@ -46,9 +35,6 @@ public class MultiLevelCacheConfig {
                 .recordStats();
     }
 
-    /**
-     * 票价档位 Caffeine Cache
-     */
     @Bean
     public Caffeine<Object, Object> ticketGradeCaffeine() {
         return Caffeine.newBuilder()
@@ -57,38 +43,24 @@ public class MultiLevelCacheConfig {
                 .recordStats();
     }
 
-    /**
-     * Caffeine Cache Manager
-     */
     @Bean
     public CacheManager cacheManager() {
         CaffeineCacheManager cacheManager = new CaffeineCacheManager();
-        cacheManager.setCaffeine(userCaffeine());
-        cacheManager.registerCustomCache(CacheConstant.CACHE_USER, userCaffeine().build());
         cacheManager.registerCustomCache(CacheConstant.CACHE_CONCERT, concertCaffeine().build());
         cacheManager.registerCustomCache(CacheConstant.CACHE_TICKET_GRADE, ticketGradeCaffeine().build());
         return cacheManager;
     }
 
-    /**
-     * 缓存失效监听器
-     */
     @Bean
     public CacheEvictionListener cacheEvictionListener() {
         return new CacheEvictionListener();
     }
 
-    /**
-     * 消息监听适配器
-     */
     @Bean
     public MessageListenerAdapter messageListenerAdapter(CacheEvictionListener listener) {
         return new MessageListenerAdapter(listener, "onMessage");
     }
 
-    /**
-     * Redis 消息监听容器
-     */
     @Bean
     public RedisMessageListenerContainer redisMessageListenerContainer(
             org.springframework.data.redis.connection.RedisConnectionFactory connectionFactory,

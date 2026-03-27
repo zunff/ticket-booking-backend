@@ -82,6 +82,7 @@ services:
     ports:
       - "8848:8848"
       - "9848:9848"
+      - "8828:8080"
     volumes:
       - nacos-logs:/home/nacos/logs
     networks:
