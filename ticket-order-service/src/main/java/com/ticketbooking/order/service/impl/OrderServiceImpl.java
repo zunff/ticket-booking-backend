@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ticketbooking.common.constant.RedisExpireConstants;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
@@ -63,7 +64,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public String createOrder(Long userId, Long concertId, Long gradeId, Integer quantity) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
+        // 使用 Hash 结构的库存 Key
+        String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
         String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(concertId, userId);
         String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
 
@@ -78,9 +80,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         log.info("Ticket info loaded: concertId={}, gradeId={}, price={}, stock={}", concertId, gradeId, ticketInfo.getPrice(), ticketInfo.getAvailableStock());
 
         DefaultRedisScript<Long> script = bookingLuaScript.getBookingScript();
-        // KEYS: stockKey, userPurchaseKey, limitKey
-        List<String> keys = Arrays.asList(stockKey, userPurchaseKey, limitKey);
-        Long result = redisUtils.executeLuaScript(script, keys, String.valueOf(userId), String.valueOf(quantity));
+        // KEYS: stockHashKey, userPurchaseKey, limitKey
+        List<String> keys = Arrays.asList(stockHashKey, userPurchaseKey, limitKey);
+        // ARGV: userId, quantity, gradeId, expireSeconds
+        Long result = redisUtils.executeLuaScript(script, keys,
+                String.valueOf(userId), String.valueOf(quantity), String.valueOf(gradeId),
+                String.valueOf(RedisExpireConstants.USER_PURCHASE_SECONDS));
 
         log.info("Lua script result: {} ({})", result, BookingLuaScript.getResultDesc(result));
 
@@ -168,14 +173,19 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     /**
      * 同步票务数据到 Redis（库存和限购数量）
+     * 库存使用 Hash 结构写入
      */
     private void syncTicketDataToRedis(Long concertId, Long gradeId, StockDTO stock) {
-        // 缓存过期时间：1小时30分钟 给一点容错
-        long expireSeconds = 3600 + 1800;
+        // 使用兜底缓存过期时间（比预热缓存短）
+        long expireSeconds = RedisExpireConstants.FALLBACK_CACHE_SECONDS;
 
-        // 写入库存 key
-        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        redisUtils.setEx(stockKey, String.valueOf(stock.getAvailableStock()), expireSeconds);
+        // 写入库存 Hash
+        String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
+        redisUtils.hSet(stockHashKey, String.valueOf(gradeId), String.valueOf(stock.getAvailableStock()));
+        // 为整个 Hash 设置过期时间（如果 key 存在）
+        if (Boolean.TRUE.equals(redisUtils.hasKey(stockHashKey))) {
+            redisUtils.expire(stockHashKey, expireSeconds, TimeUnit.SECONDS);
+        }
 
         // 写入限购 key
         String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);

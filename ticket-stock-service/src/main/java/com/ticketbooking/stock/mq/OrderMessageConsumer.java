@@ -1,5 +1,6 @@
 package com.ticketbooking.stock.mq;
 
+import com.ticketbooking.common.constant.RedisExpireConstants;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
@@ -151,21 +152,23 @@ public class OrderMessageConsumer {
 
     /**
      * 回滚 Redis（限购校验失败时调用）
-     * 1. 恢复库存
+     * 1. 恢复 Hash 库存
      * 2. 减少用户购买计数
      *
-     * 注意：如果 key 已过期不存在，跳过回滚，避免 INCR/DECR 自动创建错误的值
+     * 注意：如果 key 已过期不存在，跳过回滚，避免 HINCRBY 自动创建错误的值
      */
     private void rollbackRedis(TicketOrderMessage message) {
         try {
-            String stockKey = RedisKeyConstants.buildTicketStockKey(message.getConcertId(), message.getGradeId());
+            // 使用 Hash 结构的库存 Key
+            String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(message.getConcertId());
             String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(message.getConcertId(), message.getUserId());
 
-            // 恢复库存（仅当 key 存在时）
-            if (Boolean.TRUE.equals(redisUtils.hasKey(stockKey))) {
-                redisUtils.increment(stockKey, message.getQuantity());
+            // 恢复 Hash 库存（仅当 Hash field 存在时）
+            if (Boolean.TRUE.equals(redisUtils.hExists(stockHashKey, String.valueOf(message.getGradeId())))) {
+                redisUtils.hIncrBy(stockHashKey, String.valueOf(message.getGradeId()), message.getQuantity());
             } else {
-                log.warn("stockKey not exists, skip rollback: {}", stockKey);
+                log.warn("stockHash field not exists, skip rollback: concertId={}, gradeId={}",
+                         message.getConcertId(), message.getGradeId());
             }
 
             // 减少用户购买计数（仅当 key 存在时）
@@ -188,7 +191,8 @@ public class OrderMessageConsumer {
      */
     private boolean acquireConsumeLock(String orderNo) {
         String idempotentKey = RedisKeyConstants.buildConsumeIdempotentKey(orderNo);
-        Boolean setSuccess = redisUtils.setIfAbsent(idempotentKey, "1", 24, TimeUnit.HOURS);
+        Boolean setSuccess = redisUtils.setIfAbsent(idempotentKey, "1",
+                RedisExpireConstants.CONSUME_IDEMPOTENT_HOURS, TimeUnit.HOURS);
         return setSuccess != null && setSuccess;
     }
 

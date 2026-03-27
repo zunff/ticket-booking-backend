@@ -9,6 +9,8 @@ public final class RedisKeyConstants {
     public static final String CONSUME_IDEMPOTENT_KEY = "consume:idempotent:";
     public static final String TICKET_LOCK_KEY = "lock:ticket:grade:info:";
 
+    public static final String EMPTY_KEY = "_empty";
+
     /**
      * 用户在演唱会的购买数量（演唱会级别限购）
      * Key: user:concert:purchase:{concertId}:{userId}
@@ -27,8 +29,11 @@ public final class RedisKeyConstants {
         return CONCERT_INFO_KEY + concertId;
     }
 
-    public static String buildTicketStockKey(Long concertId, Long gradeId) {
-        return TICKET_STOCK_KEY + concertId + ":" + gradeId;
+    /**
+     * 演唱会库存 Hash Key (一个演唱会一个 Hash，field 为 gradeId)
+     */
+    public static String buildTicketStockHashKey(Long concertId) {
+        return TICKET_STOCK_KEY + concertId;
     }
 
     public static String buildTicketLockKey(Long concertId, Long gradeId) {

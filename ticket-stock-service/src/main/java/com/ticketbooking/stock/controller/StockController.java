@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/stock")
@@ -15,10 +16,9 @@ public class StockController {
 
     private final StockService stockService;
 
-    @GetMapping("/{concertId}/{gradeId}")
-    public Result<Integer> getStock(@PathVariable Long concertId, @PathVariable Long gradeId) {
-        Integer stock = stockService.getAvailableStock(concertId, gradeId);
-        return Result.success(stock);
+    @GetMapping("/{concertId}")
+    public Result<Map<Long, Integer>> getStocksByConcertId(@PathVariable Long concertId) {
+        return Result.success(stockService.getStockMapByConcertId(concertId));
     }
 
     @GetMapping("/logs/{concertId}/{gradeId}")

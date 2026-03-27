@@ -8,14 +8,13 @@ import com.ticketbooking.stock.entity.StockLog;
 import com.ticketbooking.stock.model.qo.StockLogQueryQO;
 
 import java.util.List;
+import java.util.Map;
 
 public interface StockService extends IService<Stock> {
 
     int decrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo);
 
     Stock getStockByConcertAndGrade(Long concertId, Long gradeId);
-
-    Integer getAvailableStock(Long concertId, Long gradeId);
 
     List<StockLog> getStockLogs(Long concertId, Long gradeId);
 
@@ -35,6 +34,11 @@ public interface StockService extends IService<Stock> {
      * 获取指定演出的所有库存DTO列表
      */
     List<StockDTO> getStockDTOsByConcertId(Long concertId);
+
+    /**
+     * 获取指定演出的库存映射 (gradeId -> availableStock)
+     */
+    Map<Long, Integer> getStockMapByConcertId(Long concertId);
 
     /**
      * 初始化库存记录

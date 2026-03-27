@@ -2,6 +2,7 @@ package com.ticketbooking.ticket.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ticketbooking.common.constant.RedisExpireConstants;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.model.dto.ConcertDTO;
 import com.ticketbooking.common.model.dto.StockDTO;
@@ -12,7 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 /**
  * 缓存预热服务
@@ -27,11 +30,6 @@ public class CachePreheatService {
     private final ConcertService concertService;
     private final RedisUtils redisUtils;
     private final ObjectMapper objectMapper;
-
-    /**
-     * 缓存过期时间：24 小时
-     */
-    private static final long CACHE_EXPIRE_HOURS = 24;
 
     /**
      * 预热演唱会缓存
@@ -73,7 +71,7 @@ public class CachePreheatService {
     private void preheatConcertLimit(Long concertId, Integer purchaseLimit) {
         String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
         int limit = purchaseLimit != null ? purchaseLimit : 1;
-        redisUtils.set(limitKey, String.valueOf(limit), CACHE_EXPIRE_HOURS, TimeUnit.HOURS);
+        redisUtils.set(limitKey, String.valueOf(limit), RedisExpireConstants.PREHEAT_CACHE_HOURS, TimeUnit.HOURS);
         log.debug("[缓存预热] 限购数量: key={}, value={}", limitKey, limit);
     }
 
@@ -84,7 +82,7 @@ public class CachePreheatService {
         String infoKey = RedisKeyConstants.buildConcertInfoKey(concert.getId());
         try {
             String concertJson = objectMapper.writeValueAsString(concert);
-            redisUtils.set(infoKey, concertJson, CACHE_EXPIRE_HOURS, TimeUnit.HOURS);
+            redisUtils.set(infoKey, concertJson, RedisExpireConstants.PREHEAT_CACHE_HOURS, TimeUnit.HOURS);
             log.debug("[缓存预热] 演唱会信息: key={}", infoKey);
         } catch (JsonProcessingException e) {
             log.error("[缓存预热] 序列化失败: concertId={}", concert.getId(), e);
@@ -94,7 +92,7 @@ public class CachePreheatService {
 
     /**
      * 预热各档位库存
-     * 直接通过 Feign 查询库存信息并写入 Redis
+     * 使用 Hash 结构批量写入，一个演唱会一个 Hash Key
      */
     private void preheatStockCache(Long concertId) {
         List<StockDTO> stocks = stockServiceClient.getStocksByConcertId(concertId);
@@ -103,17 +101,17 @@ public class CachePreheatService {
             return;
         }
 
-        int successCount = 0;
-        for (StockDTO stock : stocks) {
-            try {
-                String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, stock.getGradeId());
-                redisUtils.set(stockKey, String.valueOf(stock.getAvailableStock()), CACHE_EXPIRE_HOURS, TimeUnit.HOURS);
-                successCount++;
-            } catch (Exception e) {
-                log.error("[缓存预热] 写入库存失败: concertId={}, gradeId={}", concertId, stock.getGradeId(), e);
-            }
-        }
+        // 使用 HMSET 一次性写入所有档位库存
+        String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
+        Map<String, String> stockMap = stocks.stream()
+                .collect(Collectors.toMap(
+                        s -> String.valueOf(s.getGradeId()),
+                        s -> String.valueOf(s.getAvailableStock())
+                ));
 
-        log.info("[缓存预热] 库存预热完成: concertId={}, 成功={}/{}", concertId, successCount, stocks.size());
+        redisUtils.hMSet(stockHashKey, stockMap);
+        redisUtils.expire(stockHashKey, RedisExpireConstants.PREHEAT_CACHE_HOURS, TimeUnit.HOURS);
+
+        log.info("[缓存预热] 库存预热完成: concertId={}, 档位数={}", concertId, stocks.size());
     }
 }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ticketbooking.common.constant.RedisExpireConstants;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
@@ -24,6 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -34,7 +37,6 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
     private final StockLogMapper stockLogMapper;
     private final RedisUtils redisUtils;
     private final TicketServiceClient ticketServiceClient;
-    private static final long CACHE_EXPIRE_SECONDS = 3600;
     
     @Override
     @Transactional
@@ -70,24 +72,6 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
     }
     
     @Override
-    public Integer getAvailableStock(Long concertId, Long gradeId) {
-        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        String cachedStock = redisUtils.get(stockKey);
-
-        if (cachedStock != null) {
-            return Integer.parseInt(cachedStock);
-        }
-
-        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
-        if (stock == null) {
-            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-        }
-
-        redisUtils.setEx(stockKey, String.valueOf(stock.getAvailableStock()), CACHE_EXPIRE_SECONDS);
-        return stock.getAvailableStock();
-    }
-    
-    @Override
     public List<StockLog> getStockLogs(Long concertId, Long gradeId) {
         return stockLogMapper.selectList(
                 new LambdaQueryWrapper<StockLog>()
@@ -112,10 +96,10 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
 
         recordStockLog(concertId, gradeId, "ADMIN", changeAmount, beforeStock, newStock, "ADJUST", remark);
 
-        // 只有 key 存在时才更新 Redis
-        String stockKey = RedisKeyConstants.buildTicketStockKey(concertId, gradeId);
-        if (redisUtils.hasKey(stockKey)) {
-            redisUtils.set(stockKey, String.valueOf(newStock));
+        // 使用 Hash 结构更新 Redis
+        String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
+        if (Boolean.TRUE.equals(redisUtils.hExists(stockHashKey, String.valueOf(gradeId)))) {
+            redisUtils.hSet(stockHashKey, String.valueOf(gradeId), String.valueOf(newStock));
         }
 
         log.info("Stock adjusted: concertId={}, gradeId={}, before={}, after={}, remark={}",
@@ -197,6 +181,61 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
                     return dto;
                 })
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public Map<Long, Integer> getStockMapByConcertId(Long concertId) {
+        String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
+        Map<Object, Object> cache = redisUtils.hGetAll(stockHashKey);
+
+        // 缓存命中
+        if (cache != null && !cache.isEmpty()) {
+            //判断是否为空值缓存标记
+            if (cache.containsKey(RedisKeyConstants.EMPTY_KEY)) {
+                log.debug("Hit empty stock cache for concertId={}", concertId);
+                return Map.of();
+            }
+            // 正常数据转换
+            return cache.entrySet().stream()
+                    .collect(Collectors.toMap(
+                            e -> Long.parseLong(e.getKey().toString()),
+                            e -> Integer.parseInt(e.getValue().toString())
+                    ));
+        }
+
+        // 缓存未命中，查数据库
+        List<Stock> stocks = list(
+                new LambdaQueryWrapper<Stock>()
+                        .eq(Stock::getConcertId, concertId)
+        );
+
+        // 查询结果为空时，缓存空值防止穿透
+        if (stocks.isEmpty()) {
+            redisUtils.hSet(stockHashKey, RedisKeyConstants.EMPTY_KEY, "1");
+            redisUtils.expire(stockHashKey, RedisExpireConstants.NULL_CACHE_SECONDS, TimeUnit.SECONDS);
+            log.debug("Cached empty stock result for concertId={}", concertId);
+            return Map.of();
+        }
+
+        // 有数据，回写到缓存
+        Map<Long, Integer> result = stocks.stream()
+                .collect(Collectors.toMap(
+                        Stock::getGradeId,
+                        Stock::getAvailableStock,
+                        (existing, replacement) -> existing
+                ));
+
+        Map<String, String> stockMap = result.entrySet().stream()
+                .collect(Collectors.toMap(
+                        e -> String.valueOf(e.getKey()),
+                        e -> String.valueOf(e.getValue())
+                ));
+
+        redisUtils.hMSet(stockHashKey, stockMap);
+        redisUtils.expire(stockHashKey, RedisExpireConstants.PREHEAT_CACHE_HOURS, TimeUnit.HOURS);
+
+        log.debug("Cached stock data for concertId={}, grades={}", concertId, result.size());
+        return result;
     }
 
     @Override
