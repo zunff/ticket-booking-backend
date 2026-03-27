@@ -13,4 +13,5 @@ public interface UserService extends IService<User> {
     User register(User user);
     UserVO getUserVOById(Long id);
     UserVO registerAndReturnVO(User user);
+    UserVO updateUserAndReturnVO(User user);
 }

@@ -2,6 +2,9 @@ package com.ticketbooking.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ticketbooking.common.cache.MultiLevelCacheService;
+import com.ticketbooking.common.constant.CacheConstant;
+import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.utils.JwtUtils;
@@ -14,14 +17,17 @@ import com.ticketbooking.user.model.qo.LoginQO;
 import com.ticketbooking.user.model.vo.LoginVO;
 import com.ticketbooking.user.model.vo.UserVO;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
     private final JwtUtils jwtUtils;
     private final UserConverter userConverter;
+    private final MultiLevelCacheService cacheService;
     
     @Override
     public User findByUsername(String username) {
@@ -35,10 +41,50 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public UserVO getUserVOById(Long id) {
-        User user = getById(id);
-        if (user == null) {
+        String cacheKey = String.valueOf(id);
+        String redisKey = RedisKeyConstants.buildUserInfoKey(id);
+
+        return cacheService.get(
+                CacheConstant.CACHE_USER,
+                cacheKey,
+                UserVO.class,
+                redisKey,
+                CacheConstant.USER_REDIS_EXPIRE_SECONDS,
+                () -> {
+                    User user = getById(id);
+                    if (user == null) {
+                        throw new BusinessException(ErrorCode.USER_NOT_FOUND);
+                    }
+                    return userConverter.toVO(user);
+                }
+        );
+    }
+
+    /**
+     * 更新用户信息并清除缓存
+     */
+    @Override
+    public UserVO updateUserAndReturnVO(User user) {
+        // 检查用户是否存在
+        User existing = getById(user.getId());
+        if (existing == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
+
+        // 保留不可修改的字段
+        user.setPassword(existing.getPassword());
+        user.setIsAdmin(existing.getIsAdmin());
+
+        // 更新数据库
+        updateById(user);
+        log.info("用户信息更新: userId={}", user.getId());
+
+        // 清除缓存
+        String cacheKey = String.valueOf(user.getId());
+        String redisKey = RedisKeyConstants.buildUserInfoKey(user.getId());
+        cacheService.evict(CacheConstant.CACHE_USER, cacheKey, redisKey);
+        log.info("用户缓存已清除: userId={}", user.getId());
+
         return userConverter.toVO(user);
     }
 

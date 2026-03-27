@@ -36,6 +36,13 @@ public class UserController {
         return Result.success(vo);
     }
 
+    @PutMapping("/{id}")
+    public Result<UserVO> updateUser(@PathVariable Long id, @RequestBody User user) {
+        user.setId(id);
+        UserVO vo = userService.updateUserAndReturnVO(user);
+        return Result.success("用户信息更新成功", vo);
+    }
+
     @PostMapping
     public Result<UserVO> createUser(@RequestBody User user) {
         UserVO vo = userService.registerAndReturnVO(user);

@@ -12,6 +12,11 @@ public interface TicketGradeService extends IService<TicketGrade> {
 
     List<TicketGrade> getGradesByConcertId(Long concertId);
 
+    /**
+     * 获取演唱会票价档位（带缓存）
+     */
+    List<TicketGrade> getGradesByConcertIdWithCache(Long concertId);
+
     TicketGrade getGradeById(Long id);
 
     TicketGradeDTO getGradeWithConcertName(Long id);

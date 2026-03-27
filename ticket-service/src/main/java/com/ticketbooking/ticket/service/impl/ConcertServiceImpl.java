@@ -3,6 +3,10 @@ package com.ticketbooking.ticket.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ticketbooking.common.cache.MultiLevelCacheService;
+import com.ticketbooking.common.constant.CacheConstant;
+import com.ticketbooking.common.constant.RedisExpireConstants;
+import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ConcertStatus;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
@@ -59,6 +63,9 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
     @Resource
     private XxlJobAdminClient xxlJobAdminClient;
 
+    @Resource
+    private MultiLevelCacheService cacheService;
+
     @Override
     public Concert createConcert(Concert concert) {
         // 状态根据时间动态计算，默认为已关闭
@@ -81,6 +88,19 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
         updateById(concert);
         log.info("Concert updated: id={}", concert.getId());
+
+        // 清除演唱会缓存
+        String cacheKey = String.valueOf(concert.getId());
+        String redisKey = RedisKeyConstants.buildConcertInfoKey(concert.getId());
+        cacheService.evict(CacheConstant.CACHE_CONCERT, cacheKey, redisKey);
+        log.info("演唱会缓存已清除: concertId={}", concert.getId());
+
+        // 清除票价档位缓存
+        cacheService.evictByPattern(
+                CacheConstant.CACHE_TICKET_GRADE,
+                String.valueOf(concert.getId()),
+                RedisKeyConstants.buildTicketGradeKey(concert.getId())
+        );
 
         // 如果开售时间有变化，更新预热任务
         if (concert.getStartSaleTime() != null &&
@@ -159,13 +179,29 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     public ConcertDetailWithStockVO getConcertDetailById(Long id, Long userId) {
-        Concert concert = getById(id);
-        if (concert == null) {
-            throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
-        }
+        // 演唱会基本信息使用多级缓存（不含库存）
+        String cacheKey = String.valueOf(id);
+        String redisKey = RedisKeyConstants.buildConcertInfoKey(id);
 
-        List<TicketGrade> grades = ticketGradeService.getGradesByConcertId(id);
+        Concert concert = cacheService.get(
+                CacheConstant.CACHE_CONCERT,
+                cacheKey,
+                Concert.class,
+                redisKey,
+                RedisExpireConstants.PREHEAT_CACHE_HOURS * 3600,
+                () -> {
+                    Concert c = getById(id);
+                    if (c == null) {
+                        throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
+                    }
+                    return c;
+                }
+        );
 
+        // 票价档位使用多级缓存
+        List<TicketGrade> grades = ticketGradeService.getGradesByConcertIdWithCache(id);
+
+        // 库存信息 - 只从 Redis 获取，不加 Caffeine（高频更新）
         List<StockDTO> stocks = stockServiceClient.getStocksByConcertId(id);
         Map<Long, Integer> stockMap = stocks.stream()
                 .collect(Collectors.toMap(StockDTO::getGradeId, StockDTO::getAvailableStock));

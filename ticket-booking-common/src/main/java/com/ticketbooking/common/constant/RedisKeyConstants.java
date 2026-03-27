@@ -4,10 +4,28 @@ public final class RedisKeyConstants {
 
     private RedisKeyConstants() {}
 
+    // ==================== 用户相关 ====================
+
+    /**
+     * 用户信息缓存
+     * Key: user:info:{userId}
+     * Value: JSON 序列化的用户信息
+     */
+    public static final String USER_INFO_KEY = "user:info:";
+
+    // ==================== 演唱会相关 ====================
+
     public static final String CONCERT_INFO_KEY = "concert:info:";
     public static final String TICKET_STOCK_KEY = "ticket:stock:";
     public static final String CONSUME_IDEMPOTENT_KEY = "consume:idempotent:";
     public static final String TICKET_LOCK_KEY = "lock:ticket:grade:info:";
+
+    /**
+     * 票价档位缓存
+     * Key: ticket:grade:{concertId}
+     * Value: JSON 序列化的票价档位列表
+     */
+    public static final String TICKET_GRADE_KEY = "ticket:grade:";
 
     public static final String EMPTY_KEY = "_empty";
 
@@ -57,5 +75,19 @@ public final class RedisKeyConstants {
 
     public static String buildConsumeIdempotentKey(String orderNo) {
         return CONSUME_IDEMPOTENT_KEY + orderNo;
+    }
+
+    /**
+     * 用户信息缓存 Key
+     */
+    public static String buildUserInfoKey(Long userId) {
+        return USER_INFO_KEY + userId;
+    }
+
+    /**
+     * 票价档位缓存 Key
+     */
+    public static String buildTicketGradeKey(Long concertId) {
+        return TICKET_GRADE_KEY + concertId;
     }
 }

@@ -106,5 +106,12 @@
             <version>1.8.8</version>
             <optional>true</optional>
         </dependency>
+
+        <!-- Caffeine Local Cache -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
 </project>

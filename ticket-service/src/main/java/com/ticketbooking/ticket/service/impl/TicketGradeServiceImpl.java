@@ -2,6 +2,9 @@ package com.ticketbooking.ticket.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.ticketbooking.common.cache.MultiLevelCacheService;
+import com.ticketbooking.common.constant.CacheConstant;
+import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.dto.TicketGradeDTO;
@@ -9,16 +12,16 @@ import com.ticketbooking.ticket.client.StockServiceClient;
 import com.ticketbooking.ticket.entity.Concert;
 import com.ticketbooking.ticket.entity.TicketGrade;
 import com.ticketbooking.ticket.mapper.TicketGradeMapper;
+import com.ticketbooking.ticket.model.wrapper.TicketGradeListWrapper;
 import com.ticketbooking.ticket.service.TicketGradeService;
 import com.ticketbooking.ticket.service.ConcertService;
 import jakarta.annotation.Resource;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -30,6 +33,9 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
 
     @Resource
     private StockServiceClient stockServiceClient;
+
+    @Resource
+    private MultiLevelCacheService cacheService;
 
     @Override
     public TicketGrade createTicketGrade(TicketGrade ticketGrade) {
@@ -57,6 +63,27 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
     public List<TicketGrade> getGradesByConcertId(Long concertId) {
         return list(new LambdaQueryWrapper<TicketGrade>()
                 .eq(TicketGrade::getConcertId, concertId));
+    }
+
+    @Override
+    public List<TicketGrade> getGradesByConcertIdWithCache(Long concertId) {
+        String cacheKey = String.valueOf(concertId);
+        String redisKey = RedisKeyConstants.buildTicketGradeKey(concertId);
+
+        // 使用包装类处理 List 序列化
+        TicketGradeListWrapper wrapper = cacheService.get(
+                CacheConstant.CACHE_TICKET_GRADE,
+                cacheKey,
+                TicketGradeListWrapper.class,
+                redisKey,
+                CacheConstant.TICKET_GRADE_REDIS_EXPIRE_SECONDS,
+                () -> {
+                    List<TicketGrade> grades = getGradesByConcertId(concertId);
+                    return new TicketGradeListWrapper(grades);
+                }
+        );
+
+        return wrapper != null ? wrapper.getGrades() : new ArrayList<>();
     }
 
     @Override
