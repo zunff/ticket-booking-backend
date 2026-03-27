@@ -2,6 +2,7 @@ package com.ticketbooking.common.sentinel;
 
 import com.alibaba.csp.sentinel.adapter.spring.webmvc_v6x.callback.BlockExceptionHandler;
 import com.alibaba.csp.sentinel.adapter.web.common.UrlCleaner;
+import com.alibaba.csp.sentinel.annotation.aspectj.SentinelResourceAspect;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ticketbooking.common.enums.ErrorCode;
@@ -51,5 +52,13 @@ public class SentinelConfig {
             Result<Void> result = Result.error(ErrorCode.RATE_LIMITED);
             response.getWriter().write(OBJECT_MAPPER.writeValueAsString(result));
         };
+    }
+
+    /**
+     * 启用 @SentinelResource 注解支持
+     */
+    @Bean
+    public SentinelResourceAspect sentinelResourceAspect() {
+        return new SentinelResourceAspect();
     }
 }
