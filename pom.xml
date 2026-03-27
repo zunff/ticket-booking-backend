@@ -79,6 +79,21 @@
                 <artifactId>spring-cloud-starter-alibaba-sentinel-gateway</artifactId>
                 <version>${spring-cloud-alibaba.version}</version>
             </dependency>
+
+            <!-- Test Dependencies - versions from Spring Boot BOM -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-test</artifactId>
+                <version>${spring-boot.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>io.projectreactor</groupId>
+                <artifactId>reactor-test</artifactId>
+                <version>3.6.0</version>
+                <scope>test</scope>
+            </dependency>
         </dependencies>
     </dependencyManagement>
     
