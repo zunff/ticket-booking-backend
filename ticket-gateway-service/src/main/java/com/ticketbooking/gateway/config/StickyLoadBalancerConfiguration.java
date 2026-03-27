@@ -1,5 +1,6 @@
 package com.ticketbooking.gateway.config;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.cloud.loadbalancer.annotation.LoadBalancerClients;
 import org.springframework.cloud.loadbalancer.core.ReactorServiceInstanceLoadBalancer;
 import org.springframework.cloud.loadbalancer.core.ServiceInstanceListSupplier;
@@ -17,11 +18,15 @@ import org.springframework.core.env.Environment;
 public class StickyLoadBalancerConfiguration {
 
     @Bean
-    public ReactorServiceInstanceLoadBalancer stickyLoadBalancer(
+    public ReactorServiceInstanceLoadBalancer reactorServiceInstanceLoadBalancer(
             Environment environment,
-            LoadBalancerClientFactory loadBalancerClientFactory) {
-
+            LoadBalancerClientFactory factory
+    ) {
         String serviceId = environment.getProperty(LoadBalancerClientFactory.PROPERTY_NAME);
-        return new UserIdStickyLoadBalancer(serviceId);
+
+        ObjectProvider<ServiceInstanceListSupplier> supplierProvider =
+                factory.getLazyProvider(serviceId, ServiceInstanceListSupplier.class);
+
+        return new UserIdStickyLoadBalancer(serviceId, supplierProvider);
     }
 }
