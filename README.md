@@ -86,11 +86,11 @@ docker-compose -f docker-compose.dev.yaml down
 
 ### 服务地址
 
-| 服务 | 地址                                  | 说明 |
-|------|-------------------------------------|------|
-| API 网关 | http://localhost:9000               | 所有请求入口 |
-| Nacos 控制台 | http://localhost:8828/nacos         | 服务注册中心 |
-| Sentinel 控制台 | http://localhost:8858               | 限流配置 (admin/admin123) |
+| 服务 | 地址                                 | 说明 |
+|------|------------------------------------|------|
+| API 网关 | http://localhost:9000              | 所有请求入口 |
+| Nacos 控制台 | http://localhost:8828         | 服务注册中心 |
+| Sentinel 控制台 | http://localhost:8858              | 限流配置 (admin/admin123) |
 | XXL-Job 控制台 | http://localhost:8880/xxl-job-admin | 定时任务 (admin/123456) |
 
 ## API 接口

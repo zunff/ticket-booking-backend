@@ -55,7 +55,7 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             String username = claims.get(JwtConstants.CLAIM_USERNAME, String.class);
             Boolean isAdmin = claims.get(JwtConstants.CLAIM_IS_ADMIN, Boolean.class);
             
-            if (path.startsWith("/api/admin/") && (isAdmin == null || !isAdmin)) {
+            if (path.contains("admin") && (isAdmin == null || !isAdmin)) {
                 log.warn("Non-admin user {} attempted to access admin path: {}", username, path);
                 exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
                 return exchange.getResponse().setComplete();
@@ -83,7 +83,15 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                path.startsWith("/api/tickets") && !path.contains("/book") ||
                path.startsWith("/api/health") ||
                path.equals("/api/tickets") ||
-               path.matches("/api/tickets/\\d+$");
+               path.matches("/api/tickets/\\d+$") ||
+               // Knife4j API 文档相关路径
+               path.endsWith("/v3/api-docs") ||
+               path.endsWith("/swagger-resources") ||
+               path.endsWith("/swagger-resources/configuration/ui") ||
+               path.endsWith("/swagger-resources/configuration/security") ||
+               path.contains("/webjars/") ||
+               path.contains("/doc.html") ||
+               path.contains("/swagger-ui");
     }
     
     @Override

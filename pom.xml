@@ -27,6 +27,7 @@
         <spring-cloud-alibaba.version>2023.0.3.2</spring-cloud-alibaba.version>
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <mysql.version>8.0.33</mysql.version>
+        <knife4j.version>4.5.0</knife4j.version>
     </properties>
     
     <dependencyManagement>
@@ -93,6 +94,18 @@
                 <artifactId>reactor-test</artifactId>
                 <version>3.6.0</version>
                 <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-gateway-spring-boot-starter</artifactId>
+                <version>${knife4j.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.xiaoymin</groupId>
+                <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
+                <version>4.5.0</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

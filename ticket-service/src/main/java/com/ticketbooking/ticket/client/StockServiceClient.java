@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
-@FeignClient(name = "ticket-stock-service", path = "/internal/stock",
+@FeignClient(name = "ticket-stock-service", path = "/stock/internal",
              configuration = FeignClientConfig.class,
              fallbackFactory = StockServiceClientFallback.class)
 public interface StockServiceClient {

@@ -20,3 +20,10 @@ logging:
   level:
     com.ticketbooking: INFO
     org.springframework.cloud.gateway: DEBUG
+
+knife4j:
+  gateway:
+    enabled: true          # 开启网关聚合
+    strategy: discover     # 动态发现模式（配合 Nacos）
+    discover:
+      enabled: true

@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.stream.Collectors;
 
@@ -80,6 +81,17 @@ public class GlobalExceptionHandler {
     public Result<Void> handleSystemException(SystemException e) {
         log.error("System exception: code={}, message={}", e.getCode(), e.getMessage(), e);
         return Result.error(e.getCode(), e.getMessage());
+    }
+
+    /**
+     * 静态资源未找到异常（Spring Boot 3.x）
+     * 忽略 favicon.ico 等静态资源请求的错误
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result<Void> handleNoResourceFoundException(NoResourceFoundException e) {
+        log.debug("Static resource not found: {}", e.getResourcePath());
+        return Result.error(ErrorCode.NOT_FOUND);
     }
 
     @ExceptionHandler(Exception.class)

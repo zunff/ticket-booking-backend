@@ -2,7 +2,6 @@ package com.ticketbooking.ticket.controller;
 
 import com.ticketbooking.common.model.dto.TicketGradeDTO;
 import com.ticketbooking.common.result.Result;
-import com.ticketbooking.ticket.service.ConcertService;
 import com.ticketbooking.ticket.service.TicketGradeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 public class InternalTicketController {
 
     private final TicketGradeService ticketGradeService;
-    private final ConcertService concertService;
 
     @GetMapping("/grades/{id}")
     public Result<TicketGradeDTO> getGradeById(@PathVariable Long id) {

@@ -23,21 +23,14 @@ spring:
         - id: ticket-service
           uri: lb://ticket-service
           predicates:
-            - Path=/api/tickets/**
-          filters:
-            - StripPrefix=1
-
-        - id: ticket-concerts-service
-          uri: lb://ticket-service
-          predicates:
-            - Path=/api/concerts/**
+            - Path=/api/ticket/**
           filters:
             - StripPrefix=1
 
         - id: ticket-order-service
           uri: lb://ticket-order-service
           predicates:
-            - Path=/api/orders/**
+            - Path=/api/order/**
           filters:
             - StripPrefix=1
 
@@ -45,48 +38,6 @@ spring:
           uri: lb://ticket-stock-service
           predicates:
             - Path=/api/stock/**
-          filters:
-            - StripPrefix=1
-
-        - id: admin-ticket-user-service
-          uri: lb://ticket-user-service
-          predicates:
-            - Path=/api/admin/users/**
-          filters:
-            - StripPrefix=1
-
-        - id: admin-ticket-service
-          uri: lb://ticket-service
-          predicates:
-            - Path=/api/admin/tickets/**
-          filters:
-            - StripPrefix=1
-
-        - id: admin-concerts-service
-          uri: lb://ticket-service
-          predicates:
-            - Path=/api/admin/concerts/**
-          filters:
-            - StripPrefix=1
-
-        - id: admin-ticket-order-service
-          uri: lb://ticket-order-service
-          predicates:
-            - Path=/api/admin/orders/**
-          filters:
-            - StripPrefix=1
-
-        - id: admin-ticket-stock-service
-          uri: lb://ticket-stock-service
-          predicates:
-            - Path=/api/admin/stock/**
-          filters:
-            - StripPrefix=1
-
-        - id: admin-dashboard-service
-          uri: lb://ticket-service
-          predicates:
-            - Path=/api/admin/dashboard/**
           filters:
             - StripPrefix=1
 

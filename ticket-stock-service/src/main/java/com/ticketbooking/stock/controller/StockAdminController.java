@@ -1,7 +1,6 @@
 package com.ticketbooking.stock.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ticketbooking.common.annotation.RequireAuth;
 import com.ticketbooking.common.enums.Role;
 import com.ticketbooking.common.model.PageResult;
@@ -17,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/admin/stock")
+@RequestMapping("/admin")
 @RequiredArgsConstructor
 public class StockAdminController {
 

@@ -1,5 +1,7 @@
 server:
   port: 8082
+  servlet:
+    context-path: /order
 
 spring:
   application:
@@ -7,6 +9,9 @@ spring:
   threads:
     virtual:
       enabled: true
+  web:
+    resources:
+      add-mappings: true
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

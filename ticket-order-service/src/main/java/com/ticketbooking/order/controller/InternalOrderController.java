@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/internal/orders")
+@RequestMapping("/internal")
 @RequiredArgsConstructor
 public class InternalOrderController {
 
