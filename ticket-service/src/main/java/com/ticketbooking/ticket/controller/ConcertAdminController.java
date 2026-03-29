@@ -34,15 +34,17 @@ public class ConcertAdminController {
     @Operation(summary = "创建演唱会")
     @PostMapping
     @RequireAuth(Role.ADMIN)
-    public Result<ConcertVO> createConcert(@RequestBody ConcertCreateQO qo) {
-        return Result.success("演唱会创建成功", concertService.createConcert(qo));
+    public Result<Void> createConcert(@RequestBody ConcertCreateQO qo) {
+        concertService.createConcert(qo);
+        return Result.success();
     }
 
     @Operation(summary = "更新演唱会")
     @PutMapping("/{id}")
     @RequireAuth(Role.ADMIN)
-    public Result<ConcertVO> updateConcert(@PathVariable Long id, @RequestBody ConcertUpdateQO qo) {
-        return Result.success("演唱会更新成功", concertService.updateConcert(id, qo));
+    public Result<Void> updateConcert(@PathVariable Long id, @RequestBody ConcertUpdateQO qo) {
+        concertService.updateConcert(id, qo);
+        return Result.success();
     }
 
     @Operation(summary = "演唱会列表")

@@ -68,7 +68,7 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ConcertVO createConcert(ConcertCreateQO qo) {
+    public void createConcert(ConcertCreateQO qo) {
         // 创建演唱会
         Concert concert = new Concert();
         concert.setName(qo.getName());
@@ -98,13 +98,11 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
         // 创建预热任务
         schedulePreheatJob(concert);
-
-        return concertConverter.toVO(concert);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public ConcertVO updateConcert(Long id, ConcertUpdateQO qo) {
+    public void updateConcert(Long id, ConcertUpdateQO qo) {
         Concert concert = getById(id);
         if (concert == null) {
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
@@ -148,8 +146,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         if (qo.getStartSaleTime() != null) {
             schedulePreheatJob(concert);
         }
-
-        return concertConverter.toVO(concert);
     }
 
     /**
@@ -342,7 +338,10 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     public void deleteConcert(Long concertId) {
-        removePreheatJob(concertId);
+        Concert concert = getById(concertId);
+        if (concert != null) {
+            removePreheatJob(concert);
+        }
         removeById(concertId);
         log.info("Concert deleted: id={}", concertId);
     }
@@ -385,9 +384,13 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
             Integer jobId = xxlJobAdminClient.addOrUpdateOnceJob(
                     PREHEAT_JOB_HANDLER,
                     String.valueOf(concert.getId()),
-                    preheatTime
+                    preheatTime,
+                    concert.getPreheatJobId()  // 从数据库读取现有的 jobId
             );
             if (jobId != null) {
+                // 更新数据库中的 jobId
+                concert.setPreheatJobId(jobId);
+                updateById(concert);
                 log.info("预热任务创建/更新成功: concertId={}, preheatTime={}, jobId={}",
                         concert.getId(), preheatTime, jobId);
             } else {
@@ -398,14 +401,18 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         }
     }
 
-    private void removePreheatJob(Long concertId) {
+    private void removePreheatJob(Concert concert) {
+        if (concert.getPreheatJobId() == null) {
+            log.debug("演唱会没有预热任务: concertId={}", concert.getId());
+            return;
+        }
         try {
-            boolean success = xxlJobAdminClient.removeJob(String.valueOf(concertId));
+            boolean success = xxlJobAdminClient.removeJob(concert.getPreheatJobId());
             if (success) {
-                log.info("预热任务删除成功: concertId={}", concertId);
+                log.info("预热任务删除成功: concertId={}, jobId={}", concert.getId(), concert.getPreheatJobId());
             }
         } catch (Exception e) {
-            log.warn("删除预热任务异常: concertId={}", concertId, e);
+            log.warn("删除预热任务异常: concertId={}", concert.getId(), e);
         }
     }
 }

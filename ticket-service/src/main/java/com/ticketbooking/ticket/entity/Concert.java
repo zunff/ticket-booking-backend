@@ -31,6 +31,11 @@ public class Concert {
 
     private Integer status;
 
+    /**
+     * 预热任务ID（XXL-Job）
+     */
+    private Integer preheatJobId;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

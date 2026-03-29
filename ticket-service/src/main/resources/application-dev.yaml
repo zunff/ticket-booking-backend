@@ -42,6 +42,8 @@ xxl:
   job:
     admin:
       addresses: http://localhost:8880/xxl-job-admin
+      username: admin
+      password: 123456
     executor:
       appname: ticket-executor
       address: ""                                     # 留空用 ip + port

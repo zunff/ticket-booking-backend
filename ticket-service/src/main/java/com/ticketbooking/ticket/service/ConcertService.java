@@ -20,12 +20,12 @@ public interface ConcertService extends IService<Concert> {
     /**
      * 创建演唱会（含票档）
      */
-    ConcertVO createConcert(ConcertCreateQO qo);
+    void createConcert(ConcertCreateQO qo);
 
     /**
      * 更新演唱会（含票档）
      */
-    ConcertVO updateConcert(Long id, ConcertUpdateQO qo);
+    void updateConcert(Long id, ConcertUpdateQO qo);
 
     /**
      * 获取所有演唱会
