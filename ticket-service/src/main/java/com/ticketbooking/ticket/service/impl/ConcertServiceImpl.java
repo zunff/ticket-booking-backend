@@ -295,9 +295,7 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
         if (onlyOnSale) {
             // 用户端：只查开售中的演唱会
-            wrapper.ne(Concert::getStatus, 0)
-                    .le(Concert::getStartSaleTime, now)
-                    .gt(Concert::getEndSaleTime, now);
+            wrapper.ne(Concert::getStatus, 0);
         } else {
             // 管理端：根据 timeStatus 筛选
             if (qo.getTimeStatus() != null) {
