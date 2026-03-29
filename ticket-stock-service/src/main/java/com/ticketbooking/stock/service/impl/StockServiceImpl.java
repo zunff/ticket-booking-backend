@@ -252,4 +252,46 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
             log.info("Stock initialized in DB: concertId={}, gradeId={}, stock={}", concertId, gradeId, totalStock);
         }
     }
+
+    @Override
+    @Transactional
+    public void deleteByGradeIds(List<Long> gradeIds) {
+        if (gradeIds == null || gradeIds.isEmpty()) {
+            return;
+        }
+
+        // 批量删除库存记录
+        remove(new LambdaQueryWrapper<Stock>().in(Stock::getGradeId, gradeIds));
+
+        // 批量删除库存日志
+        stockLogMapper.delete(new LambdaQueryWrapper<StockLog>().in(StockLog::getGradeId, gradeIds));
+
+        log.info("Stock deleted by gradeIds: {}", gradeIds);
+    }
+
+    @Override
+    @Transactional
+    public void updateStock(Long concertId, Long gradeId, Integer newStock) {
+        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
+        if (stock == null) {
+            // 不存在则创建
+            initStock(concertId, gradeId, newStock);
+            return;
+        }
+
+        int beforeStock = stock.getAvailableStock();
+        stock.setAvailableStock(newStock);
+        updateById(stock);
+
+        // 记录日志
+        recordStockLog(concertId, gradeId, "UPDATE", newStock - beforeStock, beforeStock, newStock, "UPDATE", "票档库存更新");
+
+        // 更新 Redis 缓存
+        String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
+        if (Boolean.TRUE.equals(redisUtils.hExists(stockHashKey, String.valueOf(gradeId)))) {
+            redisUtils.hSet(stockHashKey, String.valueOf(gradeId), String.valueOf(newStock));
+        }
+
+        log.info("Stock updated: concertId={}, gradeId={}, before={}, after={}", concertId, gradeId, beforeStock, newStock);
+    }
 }

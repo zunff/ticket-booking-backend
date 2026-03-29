@@ -44,4 +44,14 @@ public interface StockService extends IService<Stock> {
      * 初始化库存记录
      */
     void initStock(Long concertId, Long gradeId, Integer totalStock);
+
+    /**
+     * 批量删除库存记录
+     */
+    void deleteByGradeIds(List<Long> gradeIds);
+
+    /**
+     * 更新库存数量
+     */
+    void updateStock(Long concertId, Long gradeId, Integer newStock);
 }

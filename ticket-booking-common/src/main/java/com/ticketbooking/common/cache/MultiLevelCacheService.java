@@ -119,9 +119,30 @@ public class MultiLevelCacheService {
      * Pattern 清除缓存
      */
     public void evictByPattern(String cacheName, String keyPattern, String redisKeyPattern) {
+        // 清除 L1
         if (cacheManager != null) {
             evictL1ByPattern(cacheName, keyPattern);
             publishEviction(cacheName, keyPattern, true);
+        }
+        // 清除 L2 (Redis)
+        evictL2ByPattern(redisKeyPattern);
+    }
+
+    /**
+     * Pattern 清除 L2 缓存
+     */
+    private void evictL2ByPattern(String pattern) {
+        if (pattern == null || pattern.isEmpty()) {
+            return;
+        }
+        try {
+            java.util.Set<String> keys = redisTemplate.keys(pattern);
+            if (keys != null && !keys.isEmpty()) {
+                redisTemplate.delete(keys);
+                log.debug("[缓存] Pattern 清除 L2: pattern={}, count={}", pattern, keys.size());
+            }
+        } catch (Exception e) {
+            log.error("[缓存] Pattern 清除 L2 失败: pattern={}", pattern, e);
         }
     }
 

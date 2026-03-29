@@ -36,6 +36,18 @@ public class StockServiceClientFallback extends FeignFallbackFactory<StockServic
                 log.warn("[{}] 初始化库存降级: concertId={}, gradeId={}", serviceName, concertId, gradeId);
                 throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
             }
+
+            @Override
+            public void deleteByGradeIds(List<Long> gradeIds) {
+                log.warn("[{}] 批量删除库存降级: gradeIds={}", serviceName, gradeIds);
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
+
+            @Override
+            public void updateStock(Long concertId, Long gradeId, Integer newStock) {
+                log.warn("[{}] 更新库存降级: concertId={}, gradeId={}", serviceName, concertId, gradeId);
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
         };
     }
 }

@@ -33,4 +33,19 @@ public class InternalStockController {
         stockService.initStock(concertId, gradeId, totalStock);
         return Result.success();
     }
+
+    @PostMapping("/deleteByGradeIds")
+    public Result<Void> deleteByGradeIds(@RequestBody List<Long> gradeIds) {
+        stockService.deleteByGradeIds(gradeIds);
+        return Result.success();
+    }
+
+    @PostMapping("/update")
+    public Result<Void> updateStock(
+            @RequestParam Long concertId,
+            @RequestParam Long gradeId,
+            @RequestParam Integer newStock) {
+        stockService.updateStock(concertId, gradeId, newStock);
+        return Result.success();
+    }
 }

@@ -38,7 +38,9 @@ public enum ErrorCode {
     
     TOKEN_INVALID(5001, "Token无效"),
     TOKEN_EXPIRED(5002, "Token已过期"),
-    NO_PERMISSION(5003, "无权限访问");
+    NO_PERMISSION(5003, "无权限访问"),
+
+    OPERATION_NOT_ALLOWED(6001, "操作不允许");
     
     private final int code;
     private final String message;

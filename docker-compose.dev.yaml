@@ -4,6 +4,7 @@ services:
     container_name: ticket-mysql
     environment:
       MYSQL_ROOT_PASSWORD: root123
+      TZ: Asia/Shanghai
     ports:
       - "3306:3306"
     volumes:
@@ -22,6 +23,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: ticket-redis
+    environment:
+      TZ: Asia/Shanghai
     ports:
       - "6379:6379"
     volumes:
@@ -79,6 +82,7 @@ services:
       NACOS_AUTH_IDENTITY_VALUE: nacos
       JVM_XMS: 128m
       JVM_XMX: 256m
+      TZ: Asia/Shanghai
     ports:
       - "8848:8848"
       - "9848:9848"
@@ -94,7 +98,8 @@ services:
     ports:
       - "8858:8858"
     environment:
-      JAVA_OPTS: "-Dserver.port=8858 -Dcsp.sentinel.dashboard.server=localhost:8858"
+      JAVA_OPTS: "-Dserver.port=8858 -Dcsp.sentinel.dashboard.server=localhost:8858 -Duser.timezone=Asia/Shanghai"
+      TZ: Asia/Shanghai
     networks:
       - ticket-network
 
@@ -105,6 +110,8 @@ services:
       - "8880:8080"
     environment:
       PARAMS: "--spring.datasource.url=jdbc:mysql://mysql:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai --spring.datasource.username=root --spring.datasource.password=root123 --xxl.job.accessToken=default_token"
+      TZ: Asia/Shanghai
+      JAVA_OPTS: "-Duser.timezone=Asia/Shanghai"
     depends_on:
       mysql:
         condition: service_healthy

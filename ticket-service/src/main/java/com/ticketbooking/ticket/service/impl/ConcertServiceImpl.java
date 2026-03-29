@@ -36,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -108,34 +109,57 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
 
-        // 更新演唱会信息
+        LocalDateTime now = LocalDateTime.now();
+        boolean isAfterSaleStart = concert.getStartSaleTime() != null && now.isAfter(concert.getStartSaleTime());
+
+        // 开售后只允许修改名称和场馆
+        if (isAfterSaleStart) {
+            if (qo.getGrades() != null && !qo.getGrades().isEmpty()) {
+                throw new BusinessException(ErrorCode.OPERATION_NOT_ALLOWED, "开售后不允许修改票档信息");
+            }
+            if (qo.getShowTime() != null || qo.getStartSaleTime() != null ||
+                qo.getEndSaleTime() != null || qo.getPurchaseLimit() != null) {
+                throw new BusinessException(ErrorCode.OPERATION_NOT_ALLOWED, "开售后只允许修改演唱会名称和场馆");
+            }
+        }
+
+        boolean isNeedEditXxl = !isAfterSaleStart && qo.getStartSaleTime() != null
+                && !concert.getStartSaleTime().equals(qo.getStartSaleTime());
+
+        // 更新演唱会基础信息（始终允许修改）
         if (qo.getName() != null) {
             concert.setName(qo.getName());
         }
         if (qo.getVenue() != null) {
             concert.setVenue(qo.getVenue());
         }
-        if (qo.getShowTime() != null) {
-            concert.setShowTime(qo.getShowTime());
+
+        // 开售前允许修改的字段
+        if (!isAfterSaleStart) {
+            if (qo.getShowTime() != null) {
+                concert.setShowTime(qo.getShowTime());
+            }
+            if (qo.getStartSaleTime() != null) {
+                concert.setStartSaleTime(qo.getStartSaleTime());
+            }
+            if (qo.getEndSaleTime() != null) {
+                concert.setEndSaleTime(qo.getEndSaleTime());
+            }
+            if (qo.getPurchaseLimit() != null) {
+                concert.setPurchaseLimit(qo.getPurchaseLimit());
+            }
         }
-        if (qo.getStartSaleTime() != null) {
-            concert.setStartSaleTime(qo.getStartSaleTime());
-        }
-        if (qo.getEndSaleTime() != null) {
-            concert.setEndSaleTime(qo.getEndSaleTime());
-        }
-        if (qo.getPurchaseLimit() != null) {
-            concert.setPurchaseLimit(qo.getPurchaseLimit());
-        }
+
+        // 状态始终可以修改（用于关闭演唱会）
         if (qo.getStatus() != null) {
             concert.setStatus(qo.getStatus());
         }
         updateById(concert);
 
-        log.info("Concert updated: id={}", id);
+        log.info("Concert updated: id={}, isAfterSaleStart={}", id, isAfterSaleStart);
 
-        // 更新票档（全量更新）
-        if (qo.getGrades() != null) {
+        // 更新票档（仅开售前允许）
+        if (!isAfterSaleStart && qo.getGrades() != null) {
             updateGrades(id, qo.getGrades());
         }
 
@@ -143,7 +167,7 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         clearConcertCache(id);
 
         // 如果开售时间有变化，更新预热任务
-        if (qo.getStartSaleTime() != null) {
+        if (isNeedEditXxl) {
             schedulePreheatJob(concert);
         }
     }
@@ -157,10 +181,32 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         Map<Long, TicketGrade> existingMap = existingGrades.stream()
                 .collect(Collectors.toMap(TicketGrade::getId, g -> g));
 
+        // 收集前端传来的有效 ID
+        List<Long> submittedIds = gradeQOs.stream()
+                .map(ConcertUpdateQO.TicketGradeQO::getId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        // 收集需要删除的票档 ID
+        List<Long> gradeIdsToDelete = existingGrades.stream()
+                .map(TicketGrade::getId)
+                .filter(id -> !submittedIds.contains(id))
+                .toList();
+
+        // 批量删除票档和对应的库存
+        if (!gradeIdsToDelete.isEmpty()) {
+            ticketGradeService.removeBatchByIds(gradeIdsToDelete);
+            stockServiceClient.deleteByGradeIds(gradeIdsToDelete);
+            log.info("Grades and stocks deleted: gradeIds={}, concertId={}", gradeIdsToDelete, concertId);
+        }
+
+        // 更新或新增票档
         for (ConcertUpdateQO.TicketGradeQO gradeQO : gradeQOs) {
             if (gradeQO.getId() != null && existingMap.containsKey(gradeQO.getId())) {
                 // 更新现有票档
                 TicketGrade grade = existingMap.get(gradeQO.getId());
+                Integer oldStock = grade.getTotalStock();
+
                 if (gradeQO.getGradeName() != null) {
                     grade.setGradeName(gradeQO.getGradeName());
                 }
@@ -174,6 +220,11 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
                     grade.setIsSelectedSeat(gradeQO.getIsSelectedSeat());
                 }
                 ticketGradeService.updateById(grade);
+
+                // 同步更新库存
+                if (gradeQO.getTotalStock() != null && !gradeQO.getTotalStock().equals(oldStock)) {
+                    stockServiceClient.updateStock(concertId, grade.getId(), gradeQO.getTotalStock());
+                }
                 log.info("Grade updated: gradeId={}", grade.getId());
             } else {
                 // 新增票档
