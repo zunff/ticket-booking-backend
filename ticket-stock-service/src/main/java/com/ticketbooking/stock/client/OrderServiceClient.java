@@ -26,6 +26,12 @@ public interface OrderServiceClient {
                          @RequestParam("reason") String reason);
 
     /**
+     * 标记订单已支付
+     */
+    @PutMapping("/{orderNo}/paid")
+    Void markOrderPaid(@PathVariable("orderNo") String orderNo);
+
+    /**
      * 检查用户是否已购买
      */
     @GetMapping("/check-bought")

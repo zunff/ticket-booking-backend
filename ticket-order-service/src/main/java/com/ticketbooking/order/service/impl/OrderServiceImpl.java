@@ -12,8 +12,10 @@ import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
+import com.ticketbooking.common.model.dto.ConcertSalesDTO;
 import com.ticketbooking.common.model.dto.DashboardStatsDTO;
 import com.ticketbooking.common.model.dto.OrderDTO;
+import com.ticketbooking.common.model.dto.SalesDataDTO;
 import com.ticketbooking.common.model.dto.StockDTO;
 import com.ticketbooking.common.model.dto.TicketGradeDTO;
 import com.ticketbooking.common.model.qo.CreateOrderQO;
@@ -37,8 +39,10 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -308,6 +312,18 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
     }
 
+    @Override
+    public void markOrderPaid(String orderNo) {
+        Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
+        if (order != null) {
+            order.setStatus(OrderStatus.PAID.getCode());
+            updateById(order);
+            log.info("Order marked as paid: orderNo={}", orderNo);
+        } else {
+            log.warn("Order not found when marking paid: orderNo={}", orderNo);
+        }
+    }
+
     private OrderDTO convertToDTO(Order order) {
         OrderDTO dto = new OrderDTO();
         BeanUtils.copyProperties(order, dto);
@@ -462,5 +478,66 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return orders.stream()
                 .mapToInt(o -> o.getQuantity() != null ? o.getQuantity() : 0)
                 .sum();
+    }
+
+    @Override
+    public List<SalesDataDTO> getSalesData(Integer days) {
+        List<SalesDataDTO> result = new ArrayList<>();
+        LocalDate today = LocalDate.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+        for (int i = days - 1; i >= 0; i--) {
+            LocalDate date = today.minusDays(i);
+            LocalDateTime dayStart = date.atStartOfDay();
+            LocalDateTime dayEnd = date.plusDays(1).atStartOfDay();
+
+            // 统计当天已支付订单
+            LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<Order>()
+                    .ge(Order::getCreateTime, dayStart)
+                    .lt(Order::getCreateTime, dayEnd)
+                    .eq(Order::getStatus, OrderStatus.PAID.getCode());
+
+            List<Order> dayOrders = list(wrapper);
+
+            SalesDataDTO dto = new SalesDataDTO();
+            dto.setDate(date.format(formatter));
+            dto.setOrders(dayOrders.size());
+            dto.setRevenue(dayOrders.stream()
+                    .mapToLong(o -> o.getTotalPrice() != null ? o.getTotalPrice() : 0L)
+                    .sum());
+            result.add(dto);
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<ConcertSalesDTO> getConcertSalesStats() {
+        List<ConcertSalesDTO> result = new ArrayList<>();
+
+        // 按演唱会分组统计已支付订单
+        List<Order> paidOrders = list(new LambdaQueryWrapper<Order>()
+                .eq(Order::getStatus, OrderStatus.PAID.getCode()));
+
+        Map<Long, List<Order>> ordersByConcert = paidOrders.stream()
+                .collect(Collectors.groupingBy(Order::getConcertId));
+
+        ordersByConcert.forEach((concertId, orders) -> {
+            ConcertSalesDTO dto = new ConcertSalesDTO();
+            dto.setConcertId(concertId);
+            dto.setTotalOrders(orders.size());
+            dto.setTotalTickets(orders.stream()
+                    .mapToInt(o -> o.getQuantity() != null ? o.getQuantity() : 0)
+                    .sum());
+            dto.setTotalRevenue(orders.stream()
+                    .mapToLong(o -> o.getTotalPrice() != null ? o.getTotalPrice() : 0L)
+                    .sum());
+            result.add(dto);
+        });
+
+        // 按总收入降序排序
+        result.sort((a, b) -> Long.compare(b.getTotalRevenue(), a.getTotalRevenue()));
+
+        return result;
     }
 }

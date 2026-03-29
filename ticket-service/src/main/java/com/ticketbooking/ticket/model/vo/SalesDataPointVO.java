@@ -1,24 +1,18 @@
 package com.ticketbooking.ticket.model.vo;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-/**
- * 销售数据点（用于图表）
- */
 @Data
+@Schema(description = "销售数据点（用于图表）")
 public class SalesDataPointVO {
-    /**
-     * 日期（格式：yyyy-MM-dd）
-     */
+
+    @Schema(description = "日期（格式：yyyy-MM-dd）")
     private String date;
 
-    /**
-     * 订单数
-     */
+    @Schema(description = "订单数")
     private Integer orders;
 
-    /**
-     * 收入（分为单位）
-     */
+    @Schema(description = "收入（分）")
     private Long revenue;
 }

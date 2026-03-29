@@ -80,10 +80,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         return path.startsWith("/actuator/") ||
                path.startsWith("/api/users/login") ||
                path.startsWith("/api/users/register") ||
-               path.startsWith("/api/tickets") && !path.contains("/book") ||
+               path.startsWith("/api/ticket") && !path.contains("/book") ||
                path.startsWith("/api/health") ||
-               path.equals("/api/tickets") ||
-               path.matches("/api/tickets/\\d+$") ||
                // Knife4j API 文档相关路径
                path.endsWith("/v3/api-docs") ||
                path.endsWith("/swagger-resources") ||

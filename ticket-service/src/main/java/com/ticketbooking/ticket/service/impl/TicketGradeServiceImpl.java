@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.cache.MultiLevelCacheService;
 import com.ticketbooking.common.constant.CacheConstant;
+import com.ticketbooking.common.constant.RedisExpireConstants;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
@@ -76,7 +77,7 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
                 cacheKey,
                 TicketGradeListWrapper.class,
                 redisKey,
-                CacheConstant.TICKET_GRADE_REDIS_EXPIRE_SECONDS,
+                RedisExpireConstants.TICKET_GRADE_EXPIRE_SECONDS,
                 () -> {
                     List<TicketGrade> grades = getGradesByConcertId(concertId);
                     return new TicketGradeListWrapper(grades);

@@ -52,4 +52,17 @@ public final class RedisExpireConstants {
      * 说明：较短的过期时间，避免占用过多内存
      */
     public static final long NULL_CACHE_SECONDS = 300L;
+
+
+
+    /**
+     * 用户信息 Redis 过期时间（秒）
+     */
+    public static final long USER_INFO_EXPIRE_SECONDS = 1800L; // 30 分钟
+
+    /**
+     * 票价档位 Redis 过期时间（秒）
+     */
+    public static final long TICKET_GRADE_EXPIRE_SECONDS = 3600L; // 1 小时
+
 }

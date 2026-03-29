@@ -244,17 +244,7 @@ public class OrderMessageConsumer {
      * 更新订单状态为已支付
      */
     private void updateOrderToPaid(TicketOrderMessage message) {
-        CreateOrderQO qo = new CreateOrderQO(
-                message.getOrderNo(),
-                message.getUserId(),
-                message.getConcertId(),
-                message.getGradeId(),
-                message.getQuantity(),
-                message.getTotalPrice(),
-                OrderStatus.PAID.getCode(),
-                null
-        );
-        orderServiceClient.createOrder(qo);
+        orderServiceClient.markOrderPaid(message.getOrderNo());
         log.info("Updated order to PAID: {}", message.getOrderNo());
     }
 

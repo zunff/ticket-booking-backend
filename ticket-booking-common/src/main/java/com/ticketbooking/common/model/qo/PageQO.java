@@ -1,21 +1,15 @@
 package com.ticketbooking.common.model.qo;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-/**
- * 通用分页查询QO
- * 所有分页查询的QO都应继承此类
- */
 @Data
+@Schema(description = "通用分页查询")
 public class PageQO {
 
-    /**
-     * 当前页码，默认第1页
-     */
+    @Schema(description = "当前页码", defaultValue = "1")
     private Long current = 1L;
 
-    /**
-     * 每页大小，默认10条
-     */
+    @Schema(description = "每页大小", defaultValue = "10")
     private Long size = 10L;
 }

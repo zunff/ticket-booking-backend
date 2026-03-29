@@ -2,8 +2,10 @@ package com.ticketbooking.order.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.ticketbooking.common.model.PageResult;
+import com.ticketbooking.common.model.dto.ConcertSalesDTO;
 import com.ticketbooking.common.model.dto.DashboardStatsDTO;
 import com.ticketbooking.common.model.dto.OrderDTO;
+import com.ticketbooking.common.model.dto.SalesDataDTO;
 import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
 import com.ticketbooking.order.entity.Order;
@@ -29,6 +31,12 @@ public interface OrderService extends IService<Order> {
      * @param failReason 失败原因
      */
     void markOrderFailed(String orderNo, String failReason);
+
+    /**
+     * 标记订单已支付
+     * @param orderNo 订单号
+     */
+    void markOrderPaid(String orderNo);
 
     /**
      * 分页查询订单（管理员）
@@ -71,4 +79,17 @@ public interface OrderService extends IService<Order> {
      * @return 已购买数量（只统计已支付订单）
      */
     int countUserPurchased(Long userId, Long concertId);
+
+    /**
+     * 获取最近N天的销售数据
+     * @param days 天数
+     * @return 每天的销售数据
+     */
+    List<SalesDataDTO> getSalesData(Integer days);
+
+    /**
+     * 获取各演唱会的销售统计
+     * @return 演唱会销售统计列表
+     */
+    List<ConcertSalesDTO> getConcertSalesStats();
 }

@@ -13,6 +13,7 @@ import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.model.dto.ConcertDTO;
 import com.ticketbooking.common.model.dto.StockDTO;
+import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.ticket.client.OrderServiceClient;
 import com.ticketbooking.ticket.client.StockServiceClient;
 import com.ticketbooking.ticket.client.XxlJobAdminClient;
@@ -20,7 +21,9 @@ import com.ticketbooking.ticket.converter.ConcertConverter;
 import com.ticketbooking.ticket.entity.Concert;
 import com.ticketbooking.ticket.entity.TicketGrade;
 import com.ticketbooking.ticket.mapper.ConcertMapper;
+import com.ticketbooking.ticket.model.qo.ConcertCreateQO;
 import com.ticketbooking.ticket.model.qo.ConcertQueryQO;
+import com.ticketbooking.ticket.model.qo.ConcertUpdateQO;
 import com.ticketbooking.ticket.model.vo.ConcertDetailWithStockVO;
 import com.ticketbooking.ticket.model.vo.ConcertVO;
 import com.ticketbooking.ticket.service.ConcertService;
@@ -28,6 +31,7 @@ import com.ticketbooking.ticket.service.TicketGradeService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -38,14 +42,7 @@ import java.util.stream.Collectors;
 @Service
 public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> implements ConcertService {
 
-    /**
-     * 预热提前时间（分钟）
-     */
     private static final int PREHEAT_ADVANCE_MINUTES = 5;
-
-    /**
-     * 预热任务 JobHandler 名称
-     */
     private static final String PREHEAT_JOB_HANDLER = "concertCachePreheat";
 
     @Resource
@@ -66,50 +63,157 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
     @Resource
     private MultiLevelCacheService cacheService;
 
+    @Resource
+    private RedisUtils redisUtils;
+
     @Override
-    public Concert createConcert(Concert concert) {
-        // 状态根据时间动态计算，默认为已关闭
+    @Transactional(rollbackFor = Exception.class)
+    public ConcertVO createConcert(ConcertCreateQO qo) {
+        // 创建演唱会
+        Concert concert = new Concert();
+        concert.setName(qo.getName());
+        concert.setVenue(qo.getVenue());
+        concert.setShowTime(qo.getShowTime());
+        concert.setStartSaleTime(qo.getStartSaleTime());
+        concert.setEndSaleTime(qo.getEndSaleTime());
+        concert.setPurchaseLimit(qo.getPurchaseLimit());
         concert.setStatus(ConcertStatus.CLOSED.getCode());
         save(concert);
+
         log.info("Concert created: id={}, name={}", concert.getId(), concert.getName());
+
+        // 创建票档
+        if (qo.getGrades() != null && !qo.getGrades().isEmpty()) {
+            for (ConcertCreateQO.TicketGradeQO gradeQO : qo.getGrades()) {
+                TicketGrade grade = new TicketGrade();
+                grade.setConcertId(concert.getId());
+                grade.setGradeName(gradeQO.getGradeName());
+                grade.setPrice(gradeQO.getPrice());
+                grade.setTotalStock(gradeQO.getTotalStock());
+                grade.setIsSelectedSeat(gradeQO.getIsSelectedSeat());
+                ticketGradeService.createTicketGrade(grade);
+            }
+            log.info("Created {} grades for concertId={}", qo.getGrades().size(), concert.getId());
+        }
 
         // 创建预热任务
         schedulePreheatJob(concert);
 
-        return concert;
+        return concertConverter.toVO(concert);
     }
 
     @Override
-    public Concert updateConcert(Concert concert) {
-        Concert existing = getById(concert.getId());
-        if (existing == null) {
+    @Transactional(rollbackFor = Exception.class)
+    public ConcertVO updateConcert(Long id, ConcertUpdateQO qo) {
+        Concert concert = getById(id);
+        if (concert == null) {
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
 
+        // 更新演唱会信息
+        if (qo.getName() != null) {
+            concert.setName(qo.getName());
+        }
+        if (qo.getVenue() != null) {
+            concert.setVenue(qo.getVenue());
+        }
+        if (qo.getShowTime() != null) {
+            concert.setShowTime(qo.getShowTime());
+        }
+        if (qo.getStartSaleTime() != null) {
+            concert.setStartSaleTime(qo.getStartSaleTime());
+        }
+        if (qo.getEndSaleTime() != null) {
+            concert.setEndSaleTime(qo.getEndSaleTime());
+        }
+        if (qo.getPurchaseLimit() != null) {
+            concert.setPurchaseLimit(qo.getPurchaseLimit());
+        }
+        if (qo.getStatus() != null) {
+            concert.setStatus(qo.getStatus());
+        }
         updateById(concert);
-        log.info("Concert updated: id={}", concert.getId());
 
+        log.info("Concert updated: id={}", id);
+
+        // 更新票档（全量更新）
+        if (qo.getGrades() != null) {
+            updateGrades(id, qo.getGrades());
+        }
+
+        // 清除缓存
+        clearConcertCache(id);
+
+        // 如果开售时间有变化，更新预热任务
+        if (qo.getStartSaleTime() != null) {
+            schedulePreheatJob(concert);
+        }
+
+        return concertConverter.toVO(concert);
+    }
+
+    /**
+     * 更新票档（全量更新）
+     */
+    private void updateGrades(Long concertId, List<ConcertUpdateQO.TicketGradeQO> gradeQOs) {
+        // 获取现有票档
+        List<TicketGrade> existingGrades = ticketGradeService.getGradesByConcertId(concertId);
+        Map<Long, TicketGrade> existingMap = existingGrades.stream()
+                .collect(Collectors.toMap(TicketGrade::getId, g -> g));
+
+        for (ConcertUpdateQO.TicketGradeQO gradeQO : gradeQOs) {
+            if (gradeQO.getId() != null && existingMap.containsKey(gradeQO.getId())) {
+                // 更新现有票档
+                TicketGrade grade = existingMap.get(gradeQO.getId());
+                if (gradeQO.getGradeName() != null) {
+                    grade.setGradeName(gradeQO.getGradeName());
+                }
+                if (gradeQO.getPrice() != null) {
+                    grade.setPrice(gradeQO.getPrice());
+                }
+                if (gradeQO.getTotalStock() != null) {
+                    grade.setTotalStock(gradeQO.getTotalStock());
+                }
+                if (gradeQO.getIsSelectedSeat() != null) {
+                    grade.setIsSelectedSeat(gradeQO.getIsSelectedSeat());
+                }
+                ticketGradeService.updateById(grade);
+                log.info("Grade updated: gradeId={}", grade.getId());
+            } else {
+                // 新增票档
+                TicketGrade grade = new TicketGrade();
+                grade.setConcertId(concertId);
+                grade.setGradeName(gradeQO.getGradeName());
+                grade.setPrice(gradeQO.getPrice());
+                grade.setTotalStock(gradeQO.getTotalStock());
+                grade.setIsSelectedSeat(gradeQO.getIsSelectedSeat() != null ? gradeQO.getIsSelectedSeat() : 0);
+                ticketGradeService.createTicketGrade(grade);
+                log.info("Grade created: gradeId={}, concertId={}", grade.getId(), concertId);
+            }
+        }
+    }
+
+    /**
+     * 清除演唱会相关缓存
+     */
+    private void clearConcertCache(Long concertId) {
         // 清除演唱会缓存
-        String cacheKey = String.valueOf(concert.getId());
-        String redisKey = RedisKeyConstants.buildConcertInfoKey(concert.getId());
+        String cacheKey = String.valueOf(concertId);
+        String redisKey = RedisKeyConstants.buildConcertInfoKey(concertId);
         cacheService.evict(CacheConstant.CACHE_CONCERT, cacheKey, redisKey);
-        log.info("演唱会缓存已清除: concertId={}", concert.getId());
+        log.info("演唱会缓存已清除: concertId={}", concertId);
 
         // 清除票价档位缓存
         cacheService.evictByPattern(
                 CacheConstant.CACHE_TICKET_GRADE,
-                String.valueOf(concert.getId()),
-                RedisKeyConstants.buildTicketGradeKey(concert.getId())
+                String.valueOf(concertId),
+                RedisKeyConstants.buildTicketGradeKey(concertId)
         );
 
-        // 如果开售时间有变化，更新预热任务
-        if (concert.getStartSaleTime() != null &&
-            (existing.getStartSaleTime() == null ||
-             !existing.getStartSaleTime().equals(concert.getStartSaleTime()))) {
-            schedulePreheatJob(concert);
-        }
-
-        return concert;
+        // 清除限购数量缓存
+        String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
+        redisUtils.delete(limitKey);
+        log.info("限购数量缓存已清除: key={}", limitKey);
     }
 
     @Override
@@ -119,57 +223,67 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     public PageResult<ConcertVO> getConcerts(ConcertQueryQO qo) {
+        return getConcertsInternal(qo, true);
+    }
+
+    @Override
+    public PageResult<ConcertVO> getConcertsForAdmin(ConcertQueryQO qo) {
+        return getConcertsInternal(qo, false);
+    }
+
+    /**
+     * 分页查询演唱会列表
+     *
+     * @param qo 查询条件
+     * @param onlyOnSale 是否只查开售中（用户端为 true，管理端为 false）
+     */
+    private PageResult<ConcertVO> getConcertsInternal(ConcertQueryQO qo, boolean onlyOnSale) {
         LambdaQueryWrapper<Concert> wrapper = new LambdaQueryWrapper<>();
 
-        // 名称模糊查询
         if (qo.getName() != null && !qo.getName().trim().isEmpty()) {
             wrapper.like(Concert::getName, qo.getName().trim());
         }
 
-        // 基于时间的动态状态筛选
-        if (qo.getTimeStatus() != null) {
-            LocalDateTime now = LocalDateTime.now();
-            switch (qo.getTimeStatus()) {
-                case 0: // 已关闭
-                    wrapper.eq(Concert::getStatus, 0);
-                    break;
-                case 1: // 开售中：在售票时间内
-                    wrapper.ne(Concert::getStatus, 0)
-                            .le(Concert::getStartSaleTime, now)
-                            .gt(Concert::getEndSaleTime, now);
-                    break;
-                case 2: // 即将开售：还没到开始售票时间
-                    wrapper.ne(Concert::getStatus, 0)
-                            .gt(Concert::getStartSaleTime, now);
-                    break;
-                case 3: // 已结束：已过结束售票时间
-                    wrapper.eq(Concert::getStatus, 0)
-                            .le(Concert::getEndSaleTime, now);
-                    break;
-                default:
-                    // 不筛选状态，只排除已关闭的
-                    wrapper.ne(Concert::getStatus, 0);
-                    break;
-            }
+        LocalDateTime now = LocalDateTime.now();
+
+        if (onlyOnSale) {
+            // 用户端：只查开售中的演唱会
+            wrapper.ne(Concert::getStatus, 0)
+                    .le(Concert::getStartSaleTime, now)
+                    .gt(Concert::getEndSaleTime, now);
         } else {
-            // 默认只显示非已关闭的演唱会
-            wrapper.ne(Concert::getStatus, 0);
+            // 管理端：根据 timeStatus 筛选
+            if (qo.getTimeStatus() != null) {
+                switch (qo.getTimeStatus()) {
+                    case 0: // 已关闭
+                        wrapper.eq(Concert::getStatus, 0);
+                        break;
+                    case 1: // 开售中
+                        wrapper.ne(Concert::getStatus, 0)
+                                .le(Concert::getStartSaleTime, now)
+                                .gt(Concert::getEndSaleTime, now);
+                        break;
+                    case 2: // 即将开售
+                        wrapper.ne(Concert::getStatus, 0)
+                                .gt(Concert::getStartSaleTime, now);
+                        break;
+                    case 3: // 已结束
+                        wrapper.ne(Concert::getStatus, 0)
+                                .le(Concert::getEndSaleTime, now);
+                        break;
+                    default:
+                        break;
+                }
+            }
+            // 管理端不传 timeStatus 则查所有
         }
 
-        // 按演出时间降序排序
         wrapper.orderByDesc(Concert::getShowTime);
 
         Page<Concert> page = page(new Page<>(qo.getCurrent(), qo.getSize()), wrapper);
-
-        // 转换为 VO
         List<ConcertVO> voList = concertConverter.toVOList(page.getRecords());
 
-        return PageResult.of(
-                voList,
-                page.getTotal(),
-                page.getCurrent(),
-                page.getSize()
-        );
+        return PageResult.of(voList, page.getTotal(), page.getCurrent(), page.getSize());
     }
 
     @Override
@@ -179,7 +293,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     public ConcertDetailWithStockVO getConcertDetailById(Long id, Long userId) {
-        // 演唱会基本信息使用多级缓存（不含库存）
         String cacheKey = String.valueOf(id);
         String redisKey = RedisKeyConstants.buildConcertInfoKey(id);
 
@@ -198,21 +311,17 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
                 }
         );
 
-        // 票价档位使用多级缓存
         List<TicketGrade> grades = ticketGradeService.getGradesByConcertIdWithCache(id);
 
-        // 库存信息 - 只从 Redis 获取，不加 Caffeine（高频更新）
         List<StockDTO> stocks = stockServiceClient.getStocksByConcertId(id);
         Map<Long, Integer> stockMap = stocks.stream()
                 .collect(Collectors.toMap(StockDTO::getGradeId, StockDTO::getAvailableStock));
 
         ConcertDetailWithStockVO vo = concertConverter.toDetailWithStockVO(concert, grades, stockMap);
 
-        // 设置限购数量
         int purchaseLimit = concert.getPurchaseLimit() != null ? concert.getPurchaseLimit() : 1;
         vo.setPurchaseLimit(purchaseLimit);
 
-        // 查询用户购买数量
         if (userId != null) {
             try {
                 int purchasedCount = orderServiceClient.countUserPurchased(userId, id);
@@ -233,9 +342,7 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
 
     @Override
     public void deleteConcert(Long concertId) {
-        // 删除预热任务
         removePreheatJob(concertId);
-
         removeById(concertId);
         log.info("Concert deleted: id={}", concertId);
     }
@@ -260,9 +367,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         return dto;
     }
 
-    /**
-     * 调度预热任务
-     */
     private void schedulePreheatJob(Concert concert) {
         if (concert.getStartSaleTime() == null) {
             log.debug("演唱会没有设置开售时间，跳过预热任务: concertId={}", concert.getId());
@@ -294,9 +398,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         }
     }
 
-    /**
-     * 删除预热任务
-     */
     private void removePreheatJob(Long concertId) {
         try {
             boolean success = xxlJobAdminClient.removeJob(String.valueOf(concertId));

@@ -1,39 +1,27 @@
 package com.ticketbooking.ticket.model.vo;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
-/**
- * 演唱会销售统计
- */
 @Data
+@Schema(description = "演唱会销售统计")
 public class ConcertSalesStatsVO {
-    /**
-     * 演唱会ID
-     */
+
+    @Schema(description = "演唱会ID")
     private Long concertId;
 
-    /**
-     * 演唱会名称
-     */
+    @Schema(description = "演唱会名称")
     private String concertName;
 
-    /**
-     * 订单总数
-     */
+    @Schema(description = "订单总数")
     private Integer totalOrders;
 
-    /**
-     * 票数总和
-     */
+    @Schema(description = "已售票数")
     private Integer totalTickets;
 
-    /**
-     * 总收入（分为单位）
-     */
+    @Schema(description = "总收入（分）")
     private Long totalRevenue;
 
-    /**
-     * 完成率（已售/总库存）
-     */
+    @Schema(description = "完成率（已售/总库存）")
     private Double completionRate;
 }

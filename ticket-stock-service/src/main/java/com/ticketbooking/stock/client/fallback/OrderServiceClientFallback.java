@@ -43,6 +43,12 @@ public class OrderServiceClientFallback extends FeignFallbackFactory<OrderServic
             }
 
             @Override
+            public Void markOrderPaid(String orderNo) {
+                log.warn("[{}] 标记订单已支付降级: orderNo={}", serviceName, orderNo);
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
+
+            @Override
             public Boolean hasUserBought(Long userId, Long concertId, Long gradeId) {
                 log.warn("[{}] 检查用户购买降级: userId={}, concertId={}, gradeId={}",
                          serviceName, userId, concertId, gradeId);

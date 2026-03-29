@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ticketbooking.common.cache.MultiLevelCacheService;
 import com.ticketbooking.common.constant.CacheConstant;
+import com.ticketbooking.common.constant.RedisExpireConstants;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.exception.BusinessException;
@@ -49,7 +50,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 cacheKey,
                 UserVO.class,
                 redisKey,
-                CacheConstant.USER_REDIS_EXPIRE_SECONDS,
+                RedisExpireConstants.USER_INFO_EXPIRE_SECONDS,
                 () -> {
                     User user = getById(id);
                     if (user == null) {

@@ -93,35 +93,20 @@ docker-compose -f docker-compose.dev.yaml down
 | Sentinel 控制台 | http://localhost:8858              | 限流配置 (admin/admin123) |
 | XXL-Job 控制台 | http://localhost:8880/xxl-job-admin | 定时任务 (admin/123456) |
 
-## API 接口
+## API 接口文档
 
-### 用户服务 `/api/users`
+| 文档类型 | 地址 | 说明 |
+|------|------|------|
+| 聚合接口文档 | http://localhost:9000/doc.html | Knife4j 聚合文档（推荐） |
 
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/login` | 用户登录，返回 JWT | 否 |
-| POST | `/register` | 用户注册 | 否 |
-| GET | `/{id}` | 获取用户信息 | 是 |
-| PUT | `/{id}` | 更新用户信息 | 是 |
+### 单服务 OpenAPI 文档
 
-### 演唱会服务 `/api/concerts`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/` | 演唱会列表（分页） | 否 |
-| GET | `/{id}` | 演唱会详情（含库存、用户购买数） | 可选 |
-
-### 订单服务 `/api/orders`
-
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| POST | `/book` | **抢票**（限流） | 是 |
-| GET | `/{orderNo}` | 订单详情 | 是 |
-| GET | `/user/{userId}` | 用户订单列表 | 是 |
-
-### 管理接口 `/api/admin/*`
-
-需管理员权限，包括：演唱会 CRUD、档位管理、库存调整等。
+| 服务 | 地址 |
+|------|------|
+| 用户服务 | http://localhost:8081/users/v3/api-docs |
+| 演唱会服务 | http://localhost:8080/ticket/v3/api-docs |
+| 订单服务 | http://localhost:8082/order/v3/api-docs |
+| 库存服务 | http://localhost:8083/stock/v3/api-docs |
 
 ---
 
@@ -198,7 +183,6 @@ spring:
 
 ### 🟡 中优先级
 
-- [ ] Dashboard 销量/销售额从订单服务获取真实数据 (`DashboardServiceImpl.java:86, 101`)
 - [ ] 熔断降级策略（Redis/Kafka 异常时的降级方案）
 - [ ] 监控面板：Prometheus + Grafana
 

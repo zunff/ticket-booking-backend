@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.extension.service.IService;
 import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.model.dto.ConcertDTO;
 import com.ticketbooking.ticket.entity.Concert;
+import com.ticketbooking.ticket.model.qo.ConcertCreateQO;
 import com.ticketbooking.ticket.model.qo.ConcertQueryQO;
+import com.ticketbooking.ticket.model.qo.ConcertUpdateQO;
 import com.ticketbooking.ticket.model.vo.ConcertDetailWithStockVO;
 import com.ticketbooking.ticket.model.vo.ConcertVO;
 
@@ -16,14 +18,14 @@ import java.util.List;
 public interface ConcertService extends IService<Concert> {
 
     /**
-     * 创建演唱会
+     * 创建演唱会（含票档）
      */
-    Concert createConcert(Concert concert);
+    ConcertVO createConcert(ConcertCreateQO qo);
 
     /**
-     * 更新演唱会
+     * 更新演唱会（含票档）
      */
-    Concert updateConcert(Concert concert);
+    ConcertVO updateConcert(Long id, ConcertUpdateQO qo);
 
     /**
      * 获取所有演唱会
@@ -31,12 +33,20 @@ public interface ConcertService extends IService<Concert> {
     List<Concert> getAllConcerts();
 
     /**
-     * 分页查询演唱会列表
+     * 分页查询演唱会列表（用户端，只查开售中）
      *
      * @param qo 查询条件
      * @return 分页结果（VO）
      */
     PageResult<ConcertVO> getConcerts(ConcertQueryQO qo);
+
+    /**
+     * 分页查询演唱会列表（管理端，查所有）
+     *
+     * @param qo 查询条件
+     * @return 分页结果（VO）
+     */
+    PageResult<ConcertVO> getConcertsForAdmin(ConcertQueryQO qo);
 
     /**
      * 获取演唱会详情（包含库存信息）
