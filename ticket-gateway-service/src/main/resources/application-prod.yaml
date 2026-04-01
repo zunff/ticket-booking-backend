@@ -1,0 +1,29 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:nacos-headless:8848}
+        namespace: ${NACOS_NAMESPACE:prod}
+        group: ${NACOS_GROUP:ticket-booking}
+      config:
+        enabled: false
+    sentinel:
+      transport:
+        dashboard: ${SENTINEL_DASHBOARD:sentinel-dashboard:8858}
+        port: ${sentinel.transport.port:8723}
+      eager: true
+
+jwt:
+  secret: ${JWT_SECRET:ticket-booking-jwt-secret-key-for-demo-purpose-only}
+
+logging:
+  level:
+    com.ticketbooking: INFO
+    org.springframework.cloud.gateway: INFO
+
+knife4j:
+  gateway:
+    enabled: true
+    strategy: discover
+    discover:
+      enabled: true

@@ -11,4 +11,3 @@ test_results_*.json
 CLAUDE.md
 
 ticket-*/src/main/resources/application-test.yaml
-ticket-*/src/main/resources/application-prod.yaml
