@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinel-dashboard
+  namespace: ticket-booking
+  labels:
+    app: sentinel-dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinel-dashboard
+  template:
+    metadata:
+      labels:
+        app: sentinel-dashboard
+    spec:
+      containers:
+      - name: sentinel-dashboard
+        image: bladex/sentinel-dashboard:1.8.6
+        ports:
+        - containerPort: 8858
+          name: http
+        env:
+        - name: JAVA_OPTS
+          value: "-Dserver.port=8858 -Dcsp.sentinel.dashboard.server=localhost:8858"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8858
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8858
+          initialDelaySeconds: 30
+          periodSeconds: 5

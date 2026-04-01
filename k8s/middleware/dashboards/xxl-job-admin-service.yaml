@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: xxl-job-admin
+  namespace: ticket-booking
+  labels:
+    app: xxl-job-admin
+spec:
+  type: NodePort
+  ports:
+  - port: 8880
+    name: http
+    targetPort: 8880
+    nodePort: 30880
+  selector:
+    app: xxl-job-admin

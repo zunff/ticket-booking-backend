@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nacos-config
+  namespace: ticket-booking
+data:
+  MODE: "standalone"
+  SPRING_DATASOURCE_PLATFORM: "mysql"
+  MYSQL_SERVICE_HOST: "mysql-headless"
+  MYSQL_SERVICE_PORT: "3306"
+  MYSQL_SERVICE_DB_NAME: "nacos"
+  MYSQL_SERVICE_USER: "root"
+  MYSQL_SERVICE_PASSWORD: "root123"
+  JVM_XMS: "512m"
+  JVM_XMX: "512m"
+  JVM_XMN: "256m"

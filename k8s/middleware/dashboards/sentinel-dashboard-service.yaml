@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinel-dashboard
+  namespace: ticket-booking
+  labels:
+    app: sentinel-dashboard
+spec:
+  type: NodePort
+  ports:
+  - port: 8858
+    name: http
+    targetPort: 8858
+    nodePort: 30858
+  selector:
+    app: sentinel-dashboard

@@ -1,7 +1,7 @@
 FROM eclipse-temurin:21-jre
 WORKDIR /app
-COPY target/user-service-1.0.0.jar app.jar
-EXPOSE 8081
+COPY target/ticket-order-service-1.0.0.jar app.jar
+EXPOSE 8082
 ENTRYPOINT ["java", "-Xms512m", "-Xmx768m", "-Xss512k",
 "-XX:+UseContainerSupport","-XX:MaxRAMPercentage=75","-XX:MinRAMPercentage=50",
 "-XX:+UseZGC","-jar", "app.jar"]

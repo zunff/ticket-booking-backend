@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: ticket-booking
+data:
+  # Nacos配置
+  NACOS_SERVER_ADDR: "nacos-headless:8848"
+  NACOS_NAMESPACE: "prod"
+  NACOS_GROUP: "ticket-booking"
+
+  # MySQL配置
+  MYSQL_HOST: "mysql-headless"
+  MYSQL_PORT: "3306"
+  MYSQL_USER: "root"
+  MYSQL_PASSWORD: "root123"
+
+  # Redis配置
+  REDIS_HOST: "redis-headless"
+  REDIS_PORT: "6379"
+
+  # Kafka配置
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-headless:9092"
+
+  # Sentinel配置
+  SENTINEL_DASHBOARD: "sentinel-dashboard:8858"
+
+  # XXL-Job配置
+  XXL_JOB_ADMIN_ADDRESSES: "http://xxl-job-admin:8880/xxl-job-admin"
+
+  # JVM参数
+  JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseG1GC"

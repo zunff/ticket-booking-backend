@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nacos
+  namespace: ticket-booking
+  labels:
+    app: nacos
+spec:
+  serviceName: nacos-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nacos
+  template:
+    metadata:
+      labels:
+        app: nacos
+    spec:
+      initContainers:
+      - name: wait-for-mysql
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z mysql-headless 3306; do echo waiting for mysql; sleep 2; done']
+      containers:
+      - name: nacos
+        image: nacos/nacos-server:v2.3.0
+        ports:
+        - containerPort: 8848
+          name: http
+        - containerPort: 9848
+          name: grpc-client
+        - containerPort: 9849
+          name: grpc-server
+        envFrom:
+        - configMapRef:
+            name: nacos-config
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+        volumeMounts:
+        - name: nacos-data
+          mountPath: /home/nacos/data
+        livenessProbe:
+          httpGet:
+            path: /nacos/v1/console/health/readiness
+            port: 8848
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /nacos/v1/console/health/readiness
+            port: 8848
+          initialDelaySeconds: 30
+          periodSeconds: 5
+  volumeClaimTemplates:
+  - metadata:
+      name: nacos-data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: local-path
+      resources:
+        requests:
+          storage: 5Gi

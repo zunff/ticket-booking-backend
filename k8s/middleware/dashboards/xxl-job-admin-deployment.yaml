@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xxl-job-admin
+  namespace: ticket-booking
+  labels:
+    app: xxl-job-admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: xxl-job-admin
+  template:
+    metadata:
+      labels:
+        app: xxl-job-admin
+    spec:
+      initContainers:
+      - name: wait-for-mysql
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z mysql-headless 3306; do echo waiting for mysql; sleep 2; done']
+      containers:
+      - name: xxl-job-admin
+        image: xuxueli/xxl-job-admin:2.4.0
+        ports:
+        - containerPort: 8880
+          name: http
+        env:
+        - name: PARAMS
+          value: "--spring.datasource.url=jdbc:mysql://mysql-headless:3306/xxl_job?useUnicode=true&characterEncoding=UTF-8&autoReconnect=true&serverTimezone=Asia/Shanghai --spring.datasource.username=root --spring.datasource.password=root123"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /xxl-job-admin/
+            port: 8880
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /xxl-job-admin/
+            port: 8880
+          initialDelaySeconds: 30
+          periodSeconds: 5
