@@ -46,7 +46,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String redisKey = RedisKeyConstants.buildUserInfoKey(id);
 
         return cacheService.get(
-                CacheConstant.CACHE_USER,
                 cacheKey,
                 UserVO.class,
                 redisKey,
@@ -83,7 +82,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 清除缓存
         String cacheKey = String.valueOf(user.getId());
         String redisKey = RedisKeyConstants.buildUserInfoKey(user.getId());
-        cacheService.evict(CacheConstant.CACHE_USER, cacheKey, redisKey);
+        cacheService.evict(cacheKey, redisKey);
         log.info("用户缓存已清除: userId={}", user.getId());
 
         return userConverter.toVO(user);

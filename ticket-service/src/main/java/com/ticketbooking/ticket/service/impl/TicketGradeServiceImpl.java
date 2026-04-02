@@ -73,7 +73,6 @@ public class TicketGradeServiceImpl extends ServiceImpl<TicketGradeMapper, Ticke
 
         // 使用包装类处理 List 序列化
         TicketGradeListWrapper wrapper = cacheService.get(
-                CacheConstant.CACHE_TICKET_GRADE,
                 cacheKey,
                 TicketGradeListWrapper.class,
                 redisKey,

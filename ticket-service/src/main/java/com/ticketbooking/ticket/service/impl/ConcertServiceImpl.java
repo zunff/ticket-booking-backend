@@ -247,15 +247,14 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         // 清除演唱会缓存
         String cacheKey = String.valueOf(concertId);
         String redisKey = RedisKeyConstants.buildConcertInfoKey(concertId);
-        cacheService.evict(CacheConstant.CACHE_CONCERT, cacheKey, redisKey);
+        cacheService.evict(cacheKey, redisKey);
         log.info("演唱会缓存已清除: concertId={}", concertId);
 
         // 清除票价档位缓存
-        cacheService.evictByPattern(
-                CacheConstant.CACHE_TICKET_GRADE,
-                String.valueOf(concertId),
-                RedisKeyConstants.buildTicketGradeKey(concertId)
-        );
+        String gradeCacheKey = String.valueOf(concertId);
+        String gradeRedisKey = RedisKeyConstants.buildTicketGradeKey(concertId);
+        cacheService.evict(gradeCacheKey, gradeRedisKey);
+        log.info("票价档位缓存已清除: concertId={}", concertId);
 
         // 清除限购数量缓存
         String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
@@ -342,7 +341,6 @@ public class ConcertServiceImpl extends ServiceImpl<ConcertMapper, Concert> impl
         String redisKey = RedisKeyConstants.buildConcertInfoKey(id);
 
         Concert concert = cacheService.get(
-                CacheConstant.CACHE_CONCERT,
                 cacheKey,
                 Concert.class,
                 redisKey,

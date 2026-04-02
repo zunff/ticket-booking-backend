@@ -28,12 +28,7 @@ public class CacheEvictionMessage implements Serializable {
     private String sourceInstanceId;
 
     /**
-     * 缓存名称（用于区分不同的 Caffeine Cache）
+     * 缓存名称
      */
     private String cacheName;
-
-    /**
-     * 是否为 pattern 匹配清除
-     */
-    private boolean patternMatch;
 }

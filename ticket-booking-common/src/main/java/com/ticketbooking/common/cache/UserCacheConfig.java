@@ -1,17 +1,17 @@
 package com.ticketbooking.common.cache;
 
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.ticketbooking.common.constant.CacheConstant;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ticketbooking.common.utils.RedisUtils;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.cache.CacheManager;
-import org.springframework.cache.annotation.EnableCaching;
-import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.data.redis.listener.adapter.MessageListenerAdapter;
 
 import java.util.concurrent.TimeUnit;
 
@@ -22,43 +22,52 @@ import java.util.concurrent.TimeUnit;
  * 适用服务：ticket-user-service
  */
 @Configuration
-@EnableCaching
 @ConditionalOnClass(Caffeine.class)
 @ConditionalOnProperty(name = "multi-level-cache.user.enabled", havingValue = "true")
 public class UserCacheConfig {
 
     @Bean
-    public Caffeine<Object, Object> userCaffeine() {
+    public Cache<String, Object> userLocalCache() {
         return Caffeine.newBuilder()
                 .maximumSize(CacheConstant.USER_CACHE_MAX_SIZE)
                 .expireAfterWrite(CacheConstant.USER_CACHE_EXPIRE_MINUTES, TimeUnit.MINUTES)
-                .recordStats();
+                .recordStats()
+                .build();
     }
 
     @Bean
-    public CacheManager cacheManager() {
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager();
-        cacheManager.registerCustomCache(CacheConstant.CACHE_USER, userCaffeine().build());
-        return cacheManager;
+    public MultiLevelCacheService multiLevelCacheService(
+            RedisUtils redisUtils,
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            Cache<String, Object> userLocalCache) {
+        return new MultiLevelCacheService(
+                redisUtils,
+                redisTemplate,
+                objectMapper,
+                userLocalCache,
+                CacheConstant.CACHE_USER
+        );
     }
 
     @Bean
-    public CacheEvictionListener cacheEvictionListener() {
-        return new CacheEvictionListener();
-    }
-
-    @Bean
-    public MessageListenerAdapter messageListenerAdapter(CacheEvictionListener listener) {
-        return new MessageListenerAdapter(listener, "onMessage");
+    public CacheEvictionListener cacheEvictionListener(
+            MultiLevelCacheService cacheService,
+            ObjectMapper objectMapper) {
+        return new CacheEvictionListener(
+                cacheService,
+                objectMapper,
+                cacheService.getInstanceId()
+        );
     }
 
     @Bean
     public RedisMessageListenerContainer redisMessageListenerContainer(
             org.springframework.data.redis.connection.RedisConnectionFactory connectionFactory,
-            MessageListenerAdapter messageListenerAdapter) {
+            CacheEvictionListener cacheEvictionListener) {
         RedisMessageListenerContainer container = new RedisMessageListenerContainer();
         container.setConnectionFactory(connectionFactory);
-        container.addMessageListener(messageListenerAdapter, new ChannelTopic(CacheConstant.CACHE_EVICTION_CHANNEL));
+        container.addMessageListener(cacheEvictionListener, new ChannelTopic(CacheConstant.CACHE_EVICTION_CHANNEL));
         return container;
     }
 }
