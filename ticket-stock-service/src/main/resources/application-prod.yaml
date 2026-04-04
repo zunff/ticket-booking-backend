@@ -45,6 +45,8 @@ spring:
       properties:
         spring.json.trusted.packages: "*"
         spring.json.type.mapping: "com.ticketbooking.order.mq.TicketOrderMessage:com.ticketbooking.common.mq.TicketOrderMessage"
+        # 消费者保护配置
+        max.poll.interval.ms: 300000
     listener:
       concurrency: 5
       ack-mode: manual

@@ -45,6 +45,10 @@ spring:
       properties:
         enable.idempotence: true
         max.in.flight.requests.per.connection: 5
+        # 生产者超时和熔断保护
+        delivery.timeout.ms: 30000
+        request.timeout.ms: 10000
+        max.block.ms: 5000
     consumer:
       group-id: order-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
@@ -59,4 +63,18 @@ logging:
   level:
     com.ticketbooking: INFO
     org.springframework.kafka: WARN
+
+xxl:
+  job:
+    admin:
+      addresses: http://localhost:8880/xxl-job-admin
+      username: admin
+      password: 123456
+    executor:
+      appname: order-executor
+      address: ""
+      ip: ""
+      logpath: ./.log/xxl-job
+      logretentiondays: 30
+    accessToken: default_token
 

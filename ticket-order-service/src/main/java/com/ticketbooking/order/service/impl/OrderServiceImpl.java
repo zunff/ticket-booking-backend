@@ -29,7 +29,7 @@ import com.ticketbooking.order.entity.Order;
 import com.ticketbooking.order.mapper.OrderMapper;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
 import com.ticketbooking.order.model.vo.OrderVO;
-import com.ticketbooking.order.mq.OrderMessageProducer;
+import com.ticketbooking.order.mq.KafkaProducerService;
 import com.ticketbooking.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,7 +57,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     private static final DateTimeFormatter ORDER_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-    private final OrderMessageProducer orderMessageProducer;
+    private final KafkaProducerService kafkaProducerService;
     private final RedisUtils redisUtils;
     private final RedissonClient redissonClient;
     private final StockServiceClient stockServiceClient;
@@ -215,7 +215,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         Integer totalPrice = ticketInfo.getPrice() * quantity;
 
         TicketOrderMessage message = new TicketOrderMessage(orderNo, userId, concertId, gradeId, quantity, totalPrice);
-        orderMessageProducer.sendOrderMessage(message);
+        kafkaProducerService.sendOrderMessage(message);
 
         log.info("Order created: orderNo={}, userId={}, concertId={}, gradeId={}, quantity={}",
                 orderNo, userId, concertId, gradeId, quantity);

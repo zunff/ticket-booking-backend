@@ -72,6 +72,13 @@ public final class RedisKeyConstants {
         return CONCERT_LIMIT_KEY + concertId;
     }
 
+    // ==================== Kafka 降级相关 ====================
+
+    /**
+     * Kafka 降级消息 Redis Stream Key
+     * 用于存储发送失败的 Kafka 消息，后续重试
+     */
+    public static final String KAFKA_FALLBACK_STREAM_KEY = "kafka:fallback:order-stream";
 
     public static String buildConsumeIdempotentKey(String orderNo) {
         return CONSUME_IDEMPOTENT_KEY + orderNo;
