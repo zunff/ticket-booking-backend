@@ -30,11 +30,19 @@ CREATE TABLE `ticket_grade` (
   KEY `idx_concert_id` (`concert_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='票价档位表';
 
-INSERT INTO concerts (name, venue, show_time, start_sale_time, end_sale_time, status)
-VALUES ('2024跨年演唱会', '国家体育场', '2024-12-31 20:00:00', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY), 1);
-
+INSERT INTO ticket_concert.concerts (id,name,venue,show_time,start_sale_time,end_sale_time,status)
+VALUES
+    (1,CONCAT(YEAR(NOW())-1,'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW())-1,'-12-31 20:00:00'),CONCAT(YEAR(NOW())-1,'-01-01 10:00:00'),CONCAT(YEAR(NOW())-1,'-12-31 20:00:00'),1),
+    (2,CONCAT(YEAR(NOW()),'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW()),'-12-31 20:00:00'),CONCAT(YEAR(NOW()),'-01-01 10:00:00'),CONCAT(YEAR(NOW()),'-12-31 20:00:00'),1),
+    (3,CONCAT(YEAR(NOW())+1,'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW())+1,'-12-31 20:00:00'),CONCAT(YEAR(NOW())+1,'-01-01 10:00:00'),CONCAT(YEAR(NOW())+1,'-12-31 20:00:00'),1);
 INSERT INTO ticket_grade (concert_id, grade_name, price, total_stock, is_selected_seat)
 VALUES
 (1, 'VIP内场', 29900, 100, 0),
 (1, '普通看台', 19900, 500, 0),
-(1, '山顶票', 9900, 1000, 0);
+(1, '山顶票', 9900, 1000, 0),
+(2, 'VIP内场', 29900, 100, 0),
+(2, '普通看台', 19900, 500, 0),
+(2, '山顶票', 9900, 1000, 0),
+(3, 'VIP内场', 29900, 100, 0),
+(3, '普通看台', 19900, 500, 0),
+(3, '山顶票', 9900, 1000, 0);

@@ -1,0 +1,40 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 开发环境 - 本地服务
+  - job_name: 'ticket-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:9000']
+        labels:
+          application: 'ticket-gateway-service'
+
+  - job_name: 'ticket-service'
+    metrics_path: '/ticket/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+        labels:
+          application: 'ticket-service'
+
+  - job_name: 'ticket-user-service'
+    metrics_path: '/users/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8081']
+        labels:
+          application: 'ticket-user-service'
+
+  - job_name: 'ticket-order-service'
+    metrics_path: '/order/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8082']
+        labels:
+          application: 'ticket-order-service'
+
+  - job_name: 'ticket-stock-service'
+    metrics_path: '/stock/actuator/prometheus'
+    static_configs:
+      - targets: ['host.docker.internal:8083']
+        labels:
+          application: 'ticket-stock-service'

@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO users (username, password, nickname, email, phone, is_admin)
-VALUES ('testuser', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '测试用户', 'test@example.com', '13800138000', 0);
+-- admin / 123456
+INSERT INTO users (id, username, password, nickname, email, phone, is_admin)
+VALUES (1, 'admin', '$2a$10$hD3PRCRThYVjocahxM06yu608Xl91AWulxWO9KL7GoXBK04iH.I8e', '管理员', 'admin@example.com', '13800138001', 1);
 
-INSERT INTO users (username, password, nickname, email, phone, is_admin)
-VALUES ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '管理员', 'admin@example.com', '13800138001', 1);
+
+-- user / 123456
+INSERT INTO users (id, username, password, nickname, email, phone, is_admin)
+VALUES (2, 'user', '$2a$10$hD3PRCRThYVjocahxM06yu608Xl91AWulxWO9KL7GoXBK04iH.I8e', '测试用户', 'test@example.com', '13800138000', 0);

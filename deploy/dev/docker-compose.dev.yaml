@@ -8,8 +8,8 @@ services:
     ports:
       - "3306:3306"
     volumes:
-      - ./init-db:/docker-entrypoint-initdb.d
-      - ./init-db/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
+      - ../../init-db:/docker-entrypoint-initdb.d
+      - ../../init-db/my.cnf:/etc/mysql/conf.d/custom.cnf:ro
       - mysql-data:/var/lib/mysql
     command: --default-authentication-plugin=mysql_native_password
     networks:
@@ -105,6 +105,7 @@ services:
 
   xxl-job-admin:
     image: xuxueli/xxl-job-admin:2.4.0
+    platform: linux/amd64
     container_name: ticket-xxl-job-admin
     ports:
       - "8880:8080"
@@ -118,6 +119,39 @@ services:
     networks:
       - ticket-network
 
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: ticket-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - ticket-network
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: ticket-grafana
+    ports:
+      - "3030:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - ticket-network
+
 volumes:
   mysql-data:
   redis-data:
@@ -125,6 +159,8 @@ volumes:
   zookeeper-logs:
   kafka-data:
   nacos-logs:
+  prometheus-data:
+  grafana-data:
 
 networks:
   ticket-network:

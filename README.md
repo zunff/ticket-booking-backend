@@ -7,14 +7,25 @@
 ```
 ticket-booking-backend/
 ├── ticket-booking-common/          # 公共模块（缓存、工具、注解）
-├── ticket-user-service/             # 用户服务 (端口: 8081)
+├── ticket-user-service/            # 用户服务 (端口: 8081)
 ├── ticket-service/                 # 演唱会服务 (端口: 8080)
-├── ticket-order-service/            # 订单服务 (端口: 8082)
-├── ticket-stock-service/            # 库存服务 (端口: 8083)
-├── ticket-gateway-service/          # 网关服务 (端口: 9000)
+├── ticket-order-service/           # 订单服务 (端口: 8082)
+├── ticket-stock-service/           # 库存服务 (端口: 8083)
+├── ticket-gateway-service/         # 网关服务 (端口: 9000)
 ├── init-db/                        # 数据库初始化脚本
 ├── k6-scripts/                     # 性能压测脚本
-├── k8s/                            # Kubernetes 部署配置
+├── deploy/                         # 部署配置
+│   ├── dev/                        # 开发环境
+│   │   ├── docker-compose.dev.yaml # 基础设施 + 监控
+│   │   ├── prometheus/             # Prometheus 配置
+│   │   └── grafana/                # Grafana 配置
+│   └── k8s/                        # Kubernetes 生产环境
+│       ├── apps/                   # 微服务部署
+│       ├── middleware/             # 中间件部署
+│       │   └── monitoring/         # Prometheus ServiceMonitor
+│       ├── config/                 # ConfigMap 配置
+│       ├── hpa/                    # 自动扩缩容
+│       └── ...
 └── sh/                             # 启动/停止脚本
 ```
 
@@ -75,8 +86,8 @@ ticket-booking-backend/
 ### 启动开发环境
 
 ```bash
-# 1. 启动基础设施（MySQL、Redis、Kafka、Nacos、Sentinel、XXL-Job）
-docker-compose -f docker-compose.dev.yaml up -d
+# 1. 启动基础设施（MySQL、Redis、Kafka、Nacos、Sentinel、XXL-Job、Prometheus、Grafana）
+docker compose -f deploy/dev/docker-compose.dev.yaml up -d
 
 # 2. 等待服务就绪后，启动微服务
 bash sh/start-dev.sh
@@ -85,7 +96,7 @@ bash sh/start-dev.sh
 bash sh/stop-all.sh
 
 # 4. 停止基础设施
-docker-compose -f docker-compose.dev.yaml down
+docker compose -f  deploy/dev/docker-compose.dev.yaml down
 ```
 
 ### 服务地址
@@ -96,6 +107,8 @@ docker-compose -f docker-compose.dev.yaml down
 | Nacos 控制台 | http://localhost:8828 | 服务注册中心 |
 | Sentinel 控制台 | http://localhost:8858 | 限流配置 (admin/admin123) |
 | XXL-Job 控制台 | http://localhost:8880/xxl-job-admin | 定时任务 (admin/123456) |
+| Prometheus | http://localhost:9090 | 监控指标采集 |
+| Grafana | http://localhost:3030 | 监控面板 (admin/admin123) |
 
 ## API 接口文档
 
@@ -188,7 +201,7 @@ spring:
 ### 目录结构
 
 ```
-k8s/
+deploy/k8s/
 ├── namespace.yaml                     # 命名空间定义
 ├── ingress.yaml                       # Ingress 配置
 ├── storage/local-path-storageclass.yaml
@@ -198,7 +211,8 @@ k8s/
 │   ├── redis/
 │   ├── nacos/
 │   ├── kafka/
-│   └── dashboards/                    # Sentinel、XXL-Job
+│   ├── dashboards/                    # Sentinel、XXL-Job
+│   └── monitoring/                    # Prometheus ServiceMonitor
 ├── apps/                              # 微服务部署
 │   ├── ticket-user-service/
 │   ├── ticket-service/
@@ -214,6 +228,36 @@ k8s/
 - kubectl 已配置并连接到集群
 - Ingress Controller (nginx-ingress)
 - 存储类支持 (默认使用 local-path)
+- Helm 3.x（用于安装 Prometheus Operator）
+
+### 安装 Helm
+
+```bash
+# macOS
+brew install helm
+
+# Linux (Debian/Ubuntu)
+curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# 验证安装
+helm version
+```
+
+### 安装 Prometheus Operator
+
+```bash
+# 添加 Helm 仓库
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# 安装 kube-prometheus-stack
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace
+
+# 验证安装
+kubectl get crd servicemonitors.monitoring.coreos.com
+```
 
 ### 部署步骤
 
@@ -227,28 +271,31 @@ docker build -t ticket-booking/ticket-stock-service:1.0.0 ./ticket-stock-service
 docker build -t ticket-booking/ticket-gateway-service:1.0.0 ./ticket-gateway-service
 
 # 2. 部署基础资源
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/storage/local-path-storageclass.yaml
-kubectl apply -f k8s/config/app-config.yaml
+kubectl apply -f deploy/k8s/namespace.yaml
+kubectl apply -f deploy/k8s/storage/local-path-storageclass.yaml
+kubectl apply -f deploy/k8s/config/app-config.yaml
 
 # 3. 部署中间件
 kubectl -n ticket-booking create configmap mysql-init-scripts --from-file=init-db
-kubectl apply -f k8s/middleware/mysql/
-kubectl apply -f k8s/middleware/redis/
-kubectl apply -f k8s/middleware/nacos/
-kubectl apply -f k8s/middleware/kafka/
-kubectl apply -f k8s/middleware/dashboards/
+kubectl apply -f deploy/k8s/middleware/mysql/
+kubectl apply -f deploy/k8s/middleware/redis/
+kubectl apply -f deploy/k8s/middleware/nacos/
+kubectl apply -f deploy/k8s/middleware/kafka/
+kubectl apply -f deploy/k8s/middleware/dashboards/
 
-# 4. 部署微服务
-kubectl apply -f k8s/apps/ticket-user-service/
-kubectl apply -f k8s/apps/ticket-service/
-kubectl apply -f k8s/apps/ticket-order-service/
-kubectl apply -f k8s/apps/ticket-stock-service/
-kubectl apply -f k8s/apps/ticket-gateway-service/
+# 4. 部署监控（需要先安装 Prometheus Operator）
+kubectl apply -f deploy/k8s/middleware/monitoring/
 
-# 5. 部署 Ingress 和 HPA
-kubectl apply -f k8s/ingress.yaml
-kubectl apply -f k8s/hpa/
+# 5. 部署微服务
+kubectl apply -f deploy/k8s/apps/ticket-user-service/
+kubectl apply -f deploy/k8s/apps/ticket-service/
+kubectl apply -f deploy/k8s/apps/ticket-order-service/
+kubectl apply -f deploy/k8s/apps/ticket-stock-service/
+kubectl apply -f deploy/k8s/apps/ticket-gateway-service/
+
+# 6. 部署 Ingress 和 HPA
+kubectl apply -f deploy/k8s/ingress.yaml
+kubectl apply -f deploy/k8s/hpa/
 ```
 
 ### Kubernetes 服务端口
@@ -383,7 +430,6 @@ mysql -e "SHOW STATUS LIKE 'Threads_connected';"
 ### 🟡 中优先级
 
 - [ ] 熔断降级策略（Redis/Kafka 异常时的降级方案）
-- [ ] 监控面板：Prometheus + Grafana
 
 ### 🟢 低优先级
 

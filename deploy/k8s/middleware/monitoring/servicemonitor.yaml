@@ -1,0 +1,94 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ticket-gateway-service-monitor
+  namespace: ticket-booking
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: ticket-gateway-service
+  namespaceSelector:
+    matchNames:
+      - ticket-booking
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ticket-service-monitor
+  namespace: ticket-booking
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: ticket-service
+  namespaceSelector:
+    matchNames:
+      - ticket-booking
+  endpoints:
+    - port: http
+      path: /ticket/actuator/prometheus
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ticket-user-service-monitor
+  namespace: ticket-booking
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: ticket-user-service
+  namespaceSelector:
+    matchNames:
+      - ticket-booking
+  endpoints:
+    - port: http
+      path: /users/actuator/prometheus
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ticket-order-service-monitor
+  namespace: ticket-booking
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: ticket-order-service
+  namespaceSelector:
+    matchNames:
+      - ticket-booking
+  endpoints:
+    - port: http
+      path: /order/actuator/prometheus
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ticket-stock-service-monitor
+  namespace: ticket-booking
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: ticket-stock-service
+  namespaceSelector:
+    matchNames:
+      - ticket-booking
+  endpoints:
+    - port: http
+      path: /stock/actuator/prometheus
+      interval: 15s

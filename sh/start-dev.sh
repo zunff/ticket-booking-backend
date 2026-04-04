@@ -30,24 +30,26 @@ echo "✅ 旧进程已停止"
 echo ""
 echo "[3/4] 启动微服务..."
 
+mkdir -p .log/service
+
 echo "  启动 ticket-user-service (端口: 8081)..."
-java -Xms128m -Xmx256m -jar ticket-user-service/target/ticket-user-service-1.0.0.jar --spring.profiles.active=dev > logs/user-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-user-service/target/ticket-user-service-1.0.0.jar --spring.profiles.active=dev > .log/service/user-service.log 2>&1 &
 sleep 3
 
 echo "  启动 ticket-service (端口: 8080)..."
-java -Xms128m -Xmx256m -jar ticket-service/target/ticket-service-1.0.0.jar --spring.profiles.active=dev > logs/ticket-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-service/target/ticket-service-1.0.0.jar --spring.profiles.active=dev > .log/service/ticket-service.log 2>&1 &
 sleep 3
 
 echo "  启动 ticket-order-service (端口: 8082)..."
-java -Xms128m -Xmx256m -jar ticket-order-service/target/ticket-order-service-1.0.0.jar --spring.profiles.active=dev > logs/order-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-order-service/target/ticket-order-service-1.0.0.jar --spring.profiles.active=dev > .log/service/order-service.log 2>&1 &
 sleep 3
 
 echo "  启动 ticket-stock-service (端口: 8083)..."
-java -Xms128m -Xmx256m -jar ticket-stock-service/target/ticket-stock-service-1.0.0.jar --spring.profiles.active=dev > logs/stock-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-stock-service/target/ticket-stock-service-1.0.0.jar --spring.profiles.active=dev > .log/service/stock-service.log 2>&1 &
 sleep 3
 
 echo "  启动 ticket-gateway-service (端口: 9000)..."
-java -Xms128m -Xmx256m -jar ticket-gateway-service/target/ticket-gateway-service-1.0.0.jar --spring.profiles.active=dev > logs/gateway-service.log 2>&1 &
+java -Xms128m -Xmx256m -jar ticket-gateway-service/target/ticket-gateway-service-1.0.0.jar --spring.profiles.active=dev > .log/service/gateway-service.log 2>&1 &
 sleep 3
 
 echo ""
@@ -77,7 +79,7 @@ echo "  - 场次管理:   /api/admin/tickets/**"
 echo "  - 订单管理:   /api/admin/orders/**"
 echo "  - 库存管理:   /api/admin/stock/**"
 echo ""
-echo "日志目录: $PROJECT_DIR/logs/"
+echo "日志目录: $PROJECT_DIR/.log/service/"
 echo ""
 echo "停止服务: ./sh/stop-all.sh"
 echo "=========================================="
