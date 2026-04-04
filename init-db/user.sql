@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
+    nickname VARCHAR(50) COMMENT '用户昵称',
     email VARCHAR(100),
     phone VARCHAR(20),
     status TINYINT NOT NULL DEFAULT 1 COMMENT '1-正常 2-禁用 3-已删除',
@@ -15,8 +16,8 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_username (username)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-INSERT INTO users (username, password, email, phone, is_admin) 
-VALUES ('testuser', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'test@example.com', '13800138000', 0);
+INSERT INTO users (username, password, nickname, email, phone, is_admin)
+VALUES ('testuser', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '测试用户', 'test@example.com', '13800138000', 0);
 
-INSERT INTO users (username, password, email, phone, is_admin) 
-VALUES ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', 'admin@example.com', '13800138001', 1);
+INSERT INTO users (username, password, nickname, email, phone, is_admin)
+VALUES ('admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '管理员', 'admin@example.com', '13800138001', 1);

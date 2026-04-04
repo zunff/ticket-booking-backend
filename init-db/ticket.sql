@@ -1,6 +1,6 @@
-CREATE DATABASE IF NOT EXISTS ticket_ticket DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE IF NOT EXISTS ticket_concert DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-USE ticket_ticket;
+USE ticket_concert;
 
 CREATE TABLE `concerts` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键ID',

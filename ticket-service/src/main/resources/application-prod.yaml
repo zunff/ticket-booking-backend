@@ -14,7 +14,7 @@ spring:
       eager: true
       web-context-unify: false
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:mysql-headless}:${MYSQL_PORT:3306}/ticket_ticket?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://${MYSQL_HOST:mysql-headless}:${MYSQL_PORT:3306}/ticket_concert?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:root123}
     driver-class-name: com.mysql.cj.jdbc.Driver

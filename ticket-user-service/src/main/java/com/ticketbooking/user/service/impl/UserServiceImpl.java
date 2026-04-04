@@ -14,7 +14,10 @@ import com.ticketbooking.user.converter.UserConverter;
 import com.ticketbooking.user.entity.User;
 import com.ticketbooking.user.mapper.UserMapper;
 import com.ticketbooking.user.service.UserService;
+import com.ticketbooking.user.model.qo.ChangePasswordQO;
 import com.ticketbooking.user.model.qo.LoginQO;
+import com.ticketbooking.user.model.qo.RegisterQO;
+import com.ticketbooking.user.model.qo.UpdateProfileQO;
 import com.ticketbooking.user.model.vo.LoginVO;
 import com.ticketbooking.user.model.vo.UserVO;
 import lombok.RequiredArgsConstructor;
@@ -29,12 +32,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private final JwtUtils jwtUtils;
     private final UserConverter userConverter;
     private final MultiLevelCacheService cacheService;
-    
+
     @Override
     public User findByUsername(String username) {
         return getOne(new LambdaQueryWrapper<User>().eq(User::getUsername, username));
     }
-    
+
     @Override
     public boolean validateUser(Long userId) {
         return getById(userId) != null;
@@ -61,51 +64,82 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     /**
-     * 更新用户信息并清除缓存
+     * 更新用户个人信息
      */
     @Override
-    public UserVO updateUserAndReturnVO(User user) {
-        // 检查用户是否存在
-        User existing = getById(user.getId());
-        if (existing == null) {
+    public UserVO updateProfile(Long userId, UpdateProfileQO qo) {
+        User user = getById(userId);
+        if (user == null) {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
 
-        // 保留不可修改的字段
-        user.setPassword(existing.getPassword());
-        user.setIsAdmin(existing.getIsAdmin());
+        // 更新允许修改的字段
+        if (qo.getNickname() != null) {
+            user.setNickname(qo.getNickname());
+        }
+        if (qo.getEmail() != null) {
+            user.setEmail(qo.getEmail());
+        }
+        if (qo.getPhone() != null) {
+            user.setPhone(qo.getPhone());
+        }
 
-        // 更新数据库
         updateById(user);
-        log.info("用户信息更新: userId={}", user.getId());
+        log.info("用户个人信息更新: userId={}", userId);
 
         // 清除缓存
-        String cacheKey = String.valueOf(user.getId());
-        String redisKey = RedisKeyConstants.buildUserInfoKey(user.getId());
-        cacheService.evict(cacheKey, redisKey);
-        log.info("用户缓存已清除: userId={}", user.getId());
+        evictUserCache(userId);
 
         return userConverter.toVO(user);
     }
 
+    /**
+     * 修改密码
+     */
     @Override
-    public UserVO registerAndReturnVO(User user) {
-        User registeredUser = register(user);
-        return userConverter.toVO(registeredUser);
-    }
-    
-    @Override
-    public LoginVO login(LoginQO qo) {
-        User user = findByUsername(qo.getUsername());
+    public void changePassword(Long userId, ChangePasswordQO qo) {
+        User user = getById(userId);
         if (user == null) {
-            throw new BusinessException(ErrorCode.USER_LOGIN_FAILED);
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND);
         }
-        if (!PasswordEncoder.matches(qo.getPassword(), user.getPassword())) {
-            throw new BusinessException(ErrorCode.USER_LOGIN_FAILED);
-        }
-        
-        String token = jwtUtils.generateToken(user.getId(), user.getUsername(), user.getIsAdmin());
 
+        // 验证旧密码
+        if (!PasswordEncoder.matches(qo.getOldPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.USER_PASSWORD_ERROR);
+        }
+
+        // 设置新密码
+        user.setPassword(PasswordEncoder.encode(qo.getNewPassword()));
+        updateById(user);
+        log.info("用户密码修改: userId={}", userId);
+
+        // 清除缓存
+        evictUserCache(userId);
+    }
+
+    /**
+     * 注册并自动登录（返回token）
+     */
+    @Override
+    public LoginVO registerAndLogin(RegisterQO qo) {
+        if (findByUsername(qo.getUsername()) != null) {
+            throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS);
+        }
+
+        User user = new User();
+        user.setUsername(qo.getUsername());
+        user.setPassword(PasswordEncoder.encode(qo.getPassword()));
+        user.setNickname(qo.getNickname() != null && !qo.getNickname().isEmpty()
+            ? qo.getNickname() : qo.getUsername());
+        user.setEmail(qo.getEmail());
+        user.setPhone(qo.getPhone());
+        user.setIsAdmin(false);
+
+        save(user);
+        log.info("用户注册成功: username={}", qo.getUsername());
+
+        // 生成token
+        String token = jwtUtils.generateToken(user.getId(), user.getUsername(), user.getIsAdmin());
         UserVO userVO = userConverter.toVO(user);
 
         return LoginVO.builder()
@@ -115,13 +149,31 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     }
 
     @Override
-    public User register(User user) {
-        if (findByUsername(user.getUsername()) != null) {
-            throw new BusinessException(ErrorCode.USER_ALREADY_EXISTS);
+    public LoginVO login(LoginQO qo) {
+        User user = findByUsername(qo.getUsername());
+        if (user == null) {
+            throw new BusinessException(ErrorCode.USER_LOGIN_FAILED);
         }
-        user.setIsAdmin(false);
-        user.setPassword(PasswordEncoder.encode(user.getPassword()));
-        save(user);
-        return user;
+        if (!PasswordEncoder.matches(qo.getPassword(), user.getPassword())) {
+            throw new BusinessException(ErrorCode.USER_LOGIN_FAILED);
+        }
+
+        String token = jwtUtils.generateToken(user.getId(), user.getUsername(), user.getIsAdmin());
+        UserVO userVO = userConverter.toVO(user);
+
+        return LoginVO.builder()
+                .user(userVO)
+                .token(token)
+                .build();
+    }
+
+    /**
+     * 清除用户缓存
+     */
+    private void evictUserCache(Long userId) {
+        String cacheKey = String.valueOf(userId);
+        String redisKey = RedisKeyConstants.buildUserInfoKey(userId);
+        cacheService.evict(cacheKey, redisKey);
+        log.info("用户缓存已清除: userId={}", userId);
     }
 }

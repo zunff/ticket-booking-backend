@@ -14,7 +14,7 @@ spring:
       eager: true
       web-context-unify: false
   datasource:
-    url: jdbc:mysql://localhost:3306/ticket_ticket?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://localhost:3306/ticket_concert?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
     username: root
     password: root123
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -52,3 +52,7 @@ xxl:
       logpath: ./.log/xxl-job
       logretentiondays: 30
     accessToken: default_token
+
+multi-level-cache:
+  concert:
+    enabled: true
