@@ -52,3 +52,7 @@ xxl:
       logpath: ./.log/xxl-job
       logretentiondays: 30
     accessToken: default_token
+
+multi-level-cache:
+  concert:
+    enabled: true
