@@ -27,6 +27,9 @@ ticket-booking-backend/
 │       ├── hpa/                    # 自动扩缩容
 │       └── ...
 └── sh/                             # 启动/停止脚本
+    ├── start-dev.sh                # 启动开发环境
+    ├── stop-all.sh                 # 停止所有服务
+    └── init-sentinel-rules.sh      # 初始化 Sentinel 限流规则
 ```
 
 ## 微服务职责
@@ -95,7 +98,10 @@ bash sh/start-dev.sh
 # 3. 停止所有服务
 bash sh/stop-all.sh
 
-# 4. 停止基础设施
+# 4. 可选：初始化 Sentinel 限流规则（需要先启动 Sentinel Dashboard）
+bash sh/init-sentinel-rules.sh
+
+# 5. 停止基础设施
 docker compose -f  deploy/dev/docker-compose.dev.yaml down
 ```
 
@@ -455,6 +461,7 @@ k6 run --env BASE_URL=http://192.168.1.100:9000 \
 | 演唱会详情 | concert-detail.js | 200→500→1000 | ~4.5分钟 | 限流效果 |
 | 抢票压测 | booking.js | 100→3000 | ~8分钟 | Lua执行效率、Kafka延迟 |
 | 混合场景 | mixed-flow.js | 50→500 | ~7.5分钟 | 真实用户行为模拟 |
+| Sentinel限流测试 | sentinel-rate-limit.js | 阶梯式到达率 | ~2.5分钟 | 限流配置验证 |
 
 ### 性能基准参考
 
@@ -469,18 +476,24 @@ k6 run --env BASE_URL=http://192.168.1.100:9000 \
 
 ### 压测监控
 
+推荐使用 Grafana 仪表板查看实时监控指标：http://localhost:3030 (admin/admin123)
+
+主要关注指标：
+- **JVM**: 堆内存、GC 暂停时间、线程数
+- **HTTP**: 请求 QPS、响应时间 (P95/P99)、错误率
+- **Redis**: 连接数、命令延迟、内存使用
+- **Kafka**: 消费延迟、消息积压
+
+如需命令行调试：
+
 ```bash
 # Redis 监控
 redis-cli info clients
 redis-cli info memory
-redis-cli monitor
 
 # Kafka 消费延迟
 kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
   --describe --group stock-group
-
-# MySQL 连接数
-mysql -e "SHOW STATUS LIKE 'Threads_connected';"
 ```
 
 ---
