@@ -105,7 +105,7 @@ docker compose -f  deploy/dev/docker-compose.dev.yaml down
 |------|------|------|
 | API 网关 | http://localhost:9000 | 所有请求入口 |
 | Nacos 控制台 | http://localhost:8828 | 服务注册中心 |
-| Sentinel 控制台 | http://localhost:8858 | 限流配置 (admin/admin123) |
+| Sentinel 控制台 | http://localhost:8858 | 限流配置 (sentinel/sentinel) |
 | XXL-Job 控制台 | http://localhost:8880/xxl-job-admin | 定时任务 (admin/123456) |
 | Prometheus | http://localhost:9090 | 监控指标采集 |
 | Grafana | http://localhost:3030 | 监控面板 (admin/admin123) |
@@ -161,8 +161,8 @@ return 1
 ```
 L1 (Caffeine) → L2 (Redis) → DB
        ↓              ↓
-   本地缓存      分布式缓存
-   (Sticky)     (共享)
+    本地缓存        分布式缓存
+    (Sticky)        (共享)
 ```
 
 - **缓存类型**: 用户信息、演唱会详情、票价档位
@@ -189,10 +189,70 @@ spring:
       enabled: true
 ```
 
-### 6. Sentinel 限流
+### 6. 熔断降级与限流
+
+项目实现了多层次的熔断降级和限流保护：
+
+#### (1) API 接口限流 (Sentinel)
+
+```java
+@UserRateLimit  // 基于用户维度的限流
+public Result<T> apiMethod() { ... }
+```
 
 - `@UserRateLimit` 注解：单用户请求频率限制
 - 资源名：`ClassName:methodName`
+- 限流响应：HTTP 429 + 错误码
+
+#### (2) 服务间调用熔断 (OpenFeign + Sentinel)
+
+```java
+// FallbackFactory 模式，支持获取异常原因
+@FeignClient(name = "ticket-service", fallbackFactory = TicketServiceClientFallback.class)
+public interface TicketServiceClient { ... }
+```
+
+- 所有 FeignClient 配置 `fallbackFactory`
+- 统一继承 `FeignFallbackFactory` 基类
+- 降级时抛出 `FeignFallbackException`，错误码 `SERVICE_DEGRADED`
+
+#### (3) Redis 操作熔断保护
+
+```java
+@SentinelResource(value = "redis:get", blockHandler = "handleGet", blockHandlerClass = RedisBlockHandler.class)
+public String get(String key) { ... }
+```
+
+- `RedisUtils` 所有方法通过 `@SentinelResource` 保护
+- `RedisBlockHandler` 统一处理限流/熔断异常
+- 防止 Redis 故障拖垮整个系统
+
+#### (4) Kafka 消息发送熔断降级
+
+```
+Kafka 发送失败降级链路：
+Kafka Producer → Sentinel 限流 → 发送失败
+                      ↓                ↓
+               BlockException      Exception
+                      ↓                ↓
+               KafkaFallbackService.saveToFallback()
+                      ↓
+            ┌─────────┴─────────┐
+            ↓                   ↓
+       Redis Stream         本地内存队列
+       (持久化优先)       (最后防线，容量 10000)
+```
+
+- **第一层降级**：Redis Stream（持久化、可恢复）
+- **第二层降级**：本地有界队列（防止 OOM）
+- **重试机制**：XXL-Job 定时任务重试降级消息
+
+**关键文件**：
+- `ticket-booking-common/.../sentinel/SentinelConfig.java` - Sentinel 全局配置
+- `ticket-booking-common/.../sentinel/RedisBlockHandler.java` - Redis 熔断处理
+- `ticket-booking-common/.../sentinel/FeignFallbackFactory.java` - Feign 降级基类
+- `ticket-order-service/.../mq/KafkaFallbackService.java` - Kafka 两层降级
+- `ticket-order-service/.../job/KafkaFallbackRetryJob.java` - 降级消息重试任务
 
 ---
 
@@ -426,12 +486,6 @@ mysql -e "SHOW STATUS LIKE 'Threads_connected';"
 ---
 
 ## TODO
-
-### 🟡 中优先级
-
-- [ ] 熔断降级策略（Redis/Kafka 异常时的降级方案）
-
-### 🟢 低优先级
 
 - [ ] 性能压测与参数调优
 - [ ] 库存分段/分片设计
