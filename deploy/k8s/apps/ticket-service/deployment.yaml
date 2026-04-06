@@ -35,14 +35,14 @@ spec:
         - name: sentinel.transport.port
           value: "8719"
         - name: JAVA_OPTS
-          value: "-Xms512m -Xmx768m -Xss512k -XX:+UseContainerSupport -XX:MaxRAMPercentage=75 -XX:MinRAMPercentage=50 -XX:+UseZGC"
+          value: "-Xmx384m -Xms192m -XX:+UseG1GC"
         resources:
           requests:
-            cpu: "500m"
-            memory: "768Mi"
+            cpu: "200m"
+            memory: "256Mi"
           limits:
-            cpu: "1200m"
-            memory: "1Gi"
+            cpu: "500m"
+            memory: "512Mi"
         livenessProbe:
           httpGet:
             path: /ticket/actuator/health

@@ -538,3 +538,79 @@ kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
 
 - [ ] 性能压测与参数调优
 - [ ] 库存分段/分片设计
+
+---
+
+## 性能优化记录
+
+### 2025-04-06 Gateway JWT 缓存优化
+
+#### 背景
+压测发现 Gateway 单实例 CPU 打满（200%），QPS 只有 260/s，成为系统瓶颈。
+
+#### 问题分析
+- JWT HMAC-SHA256 签名验证是 CPU 密集操作
+- 每个请求都要完整验证，无缓存
+- Gateway 单实例成为瓶颈
+
+#### 优化方案
+
+**1. JWT Token 缓存**
+
+在 Gateway 层缓存 JWT 验证结果，使用 Caffeine 本地缓存：
+
+```yaml
+jwt:
+  cache:
+    enabled: true           # 启用缓存
+    expire-minutes: 5       # 缓存 TTL 5分钟（JWT 过期时间 24小时）
+    max-size: 10000         # 最大缓存 10000 条
+```
+
+**关键实现**：
+- 缓存签名验证结果（跳过 HMAC 计算）
+- 每次请求检查 JWT 真实过期时间（`exp` claim）
+- 缓存 key 使用 token.hashCode()，不存储完整 token
+
+**文件变更**：
+- `ticket-gateway-service/.../filter/JwtAuthFilter.java` - JWT 缓存逻辑
+- `ticket-gateway-service/.../controller/CacheStatsController.java` - 缓存监控端点
+- `ticket-gateway-service/.../resources/application-prod.yaml` - 缓存配置
+
+**2. JVM 参数调优**
+
+针对 Gateway CPU 密集型特点优化：
+
+```bash
+# Gateway (CPU 密集，高并发)
+-Xmx1024m -Xms512m 
+-XX:+UseG1GC 
+-XX:+UseStringDeduplication    # 字符串去重，减少 10-20% 堆内存
+-XX:MaxGCPauseMillis=100       # 目标 GC 停顿 100ms
+-XX:+ParallelRefProcEnabled    # 并行引用处理
+-XX:InitiatingHeapOccupancyPercent=45
+-XX:G1ReservePercent=15
+```
+
+#### 优化效果（抢票接口压测数据）
+
+**服务配置**：
+- Gateway: 1 实例，1GB 堆内存
+- Order Service: 3 实例，各 1GB 堆内存
+- Stock Service: 3 实例，各 1GB 堆内存
+- User/Concert Service: 各 1 实例，384MB 堆内存
+
+**压测参数**：800 VU 持续 30s
+
+**核心指标**：
+
+| 指标 | 数值 |
+|------|------|
+| **QPS** | 600/s |
+| 成功请求数 | 18420 |
+| 失败率 | 0.11% (22/18442) |
+| JWT 缓存命中率 | 99.15% |
+| P95 响应时间 | 2.78s |
+| P99 响应时间 | 3.02s |
+| 平均响应时间 | 1.27s |
+| 最大并发 VU | 800 |
