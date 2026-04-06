@@ -15,6 +15,10 @@ spring:
 
 jwt:
   secret: ${JWT_SECRET:ticket-booking-jwt-secret-key-for-demo-purpose-only}
+  cache:
+    enabled: ${JWT_CACHE_ENABLED:true}
+    expire-minutes: ${JWT_CACHE_EXPIRE_MINUTES:5}
+    max-size: ${JWT_CACHE_MAX_SIZE:10000}
 
 logging:
   level:

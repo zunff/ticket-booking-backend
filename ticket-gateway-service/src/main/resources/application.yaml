@@ -6,9 +6,6 @@ spring:
     name: ticket-gateway-service
   profiles:
     active: dev
-  threads:
-    virtual:
-      enabled: true
   cloud:
     gateway:
       discovery:
