@@ -401,15 +401,18 @@ kubectl rollout restart deployment/ticket-service -n ticket-booking
 k6-scripts/
 ├── config.js              # 配置文件
 ├── init-test-users.sql    # 测试用户初始化SQL
+├── .token-cache.json      # Token缓存文件（由 sh/pre-login.sh 生成）
 ├── lib/
 │   ├── auth.js            # 认证工具函数
+│   ├── token-cache.js     # Token缓存模块
 │   └── helpers.js         # 通用工具函数
 ├── scenarios/
 │   ├── login.js           # 登录压测
 │   ├── concert-list.js    # 演唱会列表查询
 │   ├── concert-detail.js  # 演唱会详情查询
 │   ├── booking.js         # 抢票压测（核心）
-│   └── mixed-flow.js      # 混合场景
+│   ├── mixed-flow.js      # 混合场景
+│   └── sentinel-rate-limit.js  # Sentinel限流测试
 └── run-all.js             # 综合压测脚本
 ```
 
@@ -433,24 +436,57 @@ choco install k6
 ### 运行压测
 
 ```bash
-# 1. 初始化测试用户（500个用户：k6_test_001 ~ k6_test_500，密码：testpass123）
+# 1. 初始化测试用户（500个用户：k6_test_001 ~ k6_test_500，密码：123456）
 mysql -u root -p ticket_user < k6-scripts/init-test-users.sql
 
-# 2. 修改配置
-export BASE_URL=http://localhost:9000
+# 2. 预登录生成 Token 缓存（重要！避免压测时重复登录）
+#    参数：<用户数量> <网关地址>
+./sh/pre-login.sh 500 http://localhost:9000
 
 # 3. 运行单个场景
 k6 run k6-scripts/scenarios/login.js
-k6 run k6-scripts/scenarios/booking.js
+k6 run k6-scripts/scenarios/booking.js \
+  -e BASE_URL=http://192.168.1.100:9000 \
+  -e CONCERT_ID=2 \
+  -e GRADE_ID=6
 
-# 4. 运行综合压测
+# 4. 运行混合场景（模拟真实用户行为）
+k6 run k6-scripts/scenarios/mixed-flow.js \
+  -e BASE_URL=http://192.168.1.100:9000 \
+  -e CONCERT_ID=2 \
+  -e GRADE_ID=6
+
+# 5. 运行综合压测（所有场景）
 k6 run k6-scripts/run-all.js
-
-# 5. 指定参数运行
-k6 run --env BASE_URL=http://192.168.1.100:9000 \
-       --env CONCERT_ID=1 --env GRADE_ID=1 \
-       k6-scripts/scenarios/booking.js
 ```
+
+### 压测流程说明
+
+**步骤 1: 初始化测试用户**
+
+```bash
+mysql -u root -p ticket_user < k6-scripts/init-test-users.sql
+```
+
+**步骤 2: 预登录生成 Token 缓存**
+
+```bash
+./sh/pre-login.sh 500 http://localhost:9000
+```
+
+生成 `k6-scripts/.token-cache.json`，包含 500 个有效 Token。
+
+**步骤 3: 运行压测**
+
+```bash
+k6 run k6-scripts/scenarios/booking.js -e BASE_URL=http://localhost:9000
+```
+
+**为什么需要预登录？**
+
+- 避免压测时大量登录请求影响测试结果
+- 减少登录接口压力，专注测试目标接口
+- 每个虚拟用户(VU)分配不同的 Token，模拟真实多用户场景
 
 ### 压测场景说明
 

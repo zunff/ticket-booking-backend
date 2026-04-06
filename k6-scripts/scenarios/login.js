@@ -3,18 +3,29 @@
  * 测试目标：测试用户登录接口的性能和并发处理能力
  */
 
-import http from 'k6';
+import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { config, endpoints, getApiUrl } from '../config.js';
 import { getTestUser } from '../lib/auth.js';
 
 // 压测配置
 export const options = {
-    stages: config.stages.medium,
+    stages: [
+        { duration: '30s', target: 50 },   // 预热阶段
+        { duration: '1m', target: 200 },   // 高负载
+        { duration: '30s', target: 0 },    // 结束
+    ],
     thresholds: {
         http_req_duration: ['p(95)<500', 'p(99)<1000'],
         http_req_failed: ['rate<0.05'],
     },
+};
+
+// HTTP 请求通用配置
+const HTTP_PARAMS = {
+    headers: { 'Content-Type': 'application/json' },
+    timeout: '30s',
+    throw: false,
 };
 
 /**
@@ -23,6 +34,11 @@ export const options = {
 export default function () {
     const vuId = __VU;
     const iteration = __ITER;
+
+    // 首次迭代添加随机延迟，错开启动
+    if (iteration === 0) {
+        sleep(Math.random() * 3);
+    }
 
     // 获取当前VU对应的测试用户
     const user = getTestUser(vuId, iteration);
@@ -34,11 +50,7 @@ export default function () {
         password: user.password,
     });
 
-    const params = {
-        headers: { 'Content-Type': 'application/json' },
-    };
-
-    const response = http.post(url, payload, params);
+    const response = http.post(url, payload, HTTP_PARAMS);
 
     // 验证结果
     check(response, {

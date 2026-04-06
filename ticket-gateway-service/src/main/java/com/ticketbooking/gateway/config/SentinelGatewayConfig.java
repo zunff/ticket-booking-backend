@@ -41,7 +41,11 @@ import java.util.regex.Pattern;
 @Configuration
 public class SentinelGatewayConfig {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    public SentinelGatewayConfig(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     // 匹配 URL 中的数字 ID，例如 /api/stock/1/3 -> /api/stock/{id}/{id}
     private static final Pattern ID_PATTERN = Pattern.compile("/\\d+(?=/|$)");

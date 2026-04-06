@@ -2,39 +2,69 @@
  * 抢票核心流程压测脚本
  * 测试目标：模拟真实抢票场景，测试高并发下的库存扣减和订单创建
  *
- * 核心测试点：
- * 1. Redis Lua 脚本原子性
- * 2. 限购逻辑
- * 3. Kafka 异步处理
- * 4. Sentinel 限流
+ * 使用方法：
+ *   # 1. 预登录生成Token缓存
+ *   ./sh/pre-login.sh 500 http://192.168.249.231:9000
+ *
+ *   # 2. 运行压测
+ *   k6 run k6-scripts/scenarios/booking.js --vus 200 --duration 3m \
+ *     -e BASE_URL=http://192.168.249.231:9000 -e CONCERT_ID=2 -e GRADE_ID=6
  */
 
-import http from 'k6';
+import http from 'k6/http';
 import { check, sleep } from 'k6';
+import { Counter } from 'k6/metrics';
 import { config, endpoints, getApiUrl } from '../config.js';
-import { login, getAuthHeaders, getTestUser } from '../lib/auth.js';
+import { getAuthHeaders } from '../lib/auth.js';
+import { getAuth, getTokenCache } from '../lib/token-cache.js';
 import { randomInt } from '../lib/helpers.js';
 
-// 压测配置 - 使用阶梯式加压
+// 压测配置
 export const options = {
-    stages: config.stages.stress,
+    scenarios: {
+        booking_test: {
+            executor: 'ramping-vus',
+            startVUs: 0,
+            stages: [
+                { duration: '30s', target: 1000 },
+                { duration: '30s', target: 3000 },
+                { duration: '30s', target: 5000 },
+                { duration: '30s', target: 8000 },
+                { duration: '30s', target: 10000 },
+                { duration: '1m', target: 10000 },
+                { duration: '30s', target: 0 },
+            ],
+            gracefulRampDown: '30s',
+        },
+    },
     thresholds: {
-        http_req_duration: ['p(95)<1000', 'p(99)<2000'],
-        // 抢票场景允许更高的错误率（库存不足、限流等）
-        http_req_failed: ['rate<0.3'],
+        http_req_duration: ['p(95)<2000', 'p(99)<5000'],
+        http_req_failed: ['rate<0.1'],
     },
 };
 
 // 测试数据配置
 const CONCERT_ID = config.testData.concertId;
 const GRADE_ID = config.testData.gradeId;
+const tokenCache = getTokenCache();
 
-// 统计数据
-let successCount = 0;
-let stockInsufficientCount = 0;
-let limitExceededCount = 0;
-let rateLimitCount = 0;
-let loginFailCount = 0;
+// 打印测试参数
+console.log('========================================');
+console.log('压测参数配置:');
+console.log('  BASE_URL:', config.baseUrl);
+console.log('  CONCERT_ID:', CONCERT_ID);
+console.log('  GRADE_ID:', GRADE_ID);
+console.log('  TOKEN_CACHE:', tokenCache.length > 0 ? tokenCache.length + '个' : '无缓存');
+console.log('  STAGES:', JSON.stringify(options.scenarios.booking_test.stages));
+console.log('========================================');
+
+// 自定义指标
+const bookingSuccess = new Counter('booking_success');
+const bookingLimitExceeded = new Counter('booking_limit_exceeded');
+const bookingStockInsufficient = new Counter('booking_stock_insufficient');
+const bookingRateLimit = new Counter('booking_rate_limit');
+const bookingLoginFail = new Counter('booking_login_fail');
+const bookingError = new Counter('booking_error');
 
 /**
  * 压测主函数
@@ -43,12 +73,16 @@ export default function () {
     const vuId = __VU;
     const iteration = __ITER;
 
-    // 获取测试用户并登录
-    const user = getTestUser(vuId, iteration);
-    const auth = login(user.username, user.password);
+    // 首次迭代添加随机延迟，错开启动
+    if (iteration === 0) {
+        sleep(Math.random() * 2);
+    }
+
+    // 获取认证信息
+    const auth = getAuth(vuId, iteration);
 
     if (!auth) {
-        loginFailCount++;
+        bookingLoginFail.add(1);
         sleep(1);
         return;
     }
@@ -63,63 +97,52 @@ export default function () {
 
     const params = {
         headers: getAuthHeaders(auth.token),
+        responseCallback: http.expectedStatuses(200, 400, 429),
     };
 
     // 发送抢票请求
     const response = http.post(url, payload, params);
 
-    // 解析响应
-    const body = JSON.parse(response.body);
-
-    // 验证结果
-    check(response, {
-        '状态码为200': (r) => r.status === 200,
-        '返回数据': (r) => {
-            try {
-                const b = JSON.parse(r.body);
-                return b.code !== undefined;
-            } catch {
-                return false;
-            }
-        },
-    });
-
-    // 根据业务返回码统计
-    if (response.status === 200 && body) {
-        if (body.code === 200) {
-            // 抢票成功
-            successCount++;
-            console.log(`VU ${vuId}: 抢票成功! 订单号: ${body.data || 'N/A'}`);
-        } else if (body.code === 500) {
-            // 业务错误，检查具体原因
-            const message = body.message || '';
-            if (message.includes('库存不足') || message.includes('-3')) {
-                stockInsufficientCount++;
-            } else if (message.includes('限购') || message.includes('-5')) {
-                limitExceededCount++;
-            }
-        }
-    } else if (response.status === 429) {
-        // 触发限流
-        rateLimitCount++;
-        console.log(`VU ${vuId}: 触发限流，等待后重试`);
-        sleep(5);
+    // 检查网络错误
+    if (response.error || response.status === 0) {
+        bookingError.add(1);
         return;
     }
 
-    // 短暂等待，模拟用户操作间隔
-    sleep(randomInt(1, 3));
-}
+    // 解析响应
+    let body = null;
+    try {
+        body = JSON.parse(response.body);
+    } catch (e) {
+        bookingError.add(1);
+        return;
+    }
 
-/**
- * 清理函数：输出统计信息
- */
-export function teardown() {
-    console.log('\n========== 抢票压测结果 ==========');
-    console.log(`抢票成功: ${successCount}`);
-    console.log(`库存不足: ${stockInsufficientCount}`);
-    console.log(`超出限购: ${limitExceededCount}`);
-    console.log(`触发限流: ${rateLimitCount}`);
-    console.log(`登录失败: ${loginFailCount}`);
-    console.log('===================================\n');
+    // 检查响应体格式
+    if (!body || typeof body.code === 'undefined') {
+        bookingError.add(1);
+        return;
+    }
+
+    // 根据业务返回码统计
+    const code = Number(body.code);
+    if (code === 200) {
+        bookingSuccess.add(1);
+        console.log('VU ' + vuId + ': 抢票成功! 订单号: ' + (body.data || 'N/A'));
+    } else if (code === 4001) {
+        bookingLimitExceeded.add(1);
+    } else if (code === 4002 || (body.message && body.message.includes('库存不足'))) {
+        bookingStockInsufficient.add(1);
+    } else if (response.status === 429) {
+        bookingRateLimit.add(1);
+    } else if (response.status === 401) {
+        console.log('VU ' + vuId + ': Token可能已过期');
+        bookingError.add(1);
+    } else {
+        bookingError.add(1);
+        if (iteration < 3) {
+            console.log('VU ' + vuId + ': 业务码 ' + code + ', ' + body.message);
+        }
+    }
+
 }

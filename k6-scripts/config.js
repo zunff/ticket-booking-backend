@@ -12,7 +12,7 @@ export const config = {
         // 用户名前缀
         userPrefix: 'k6_test_',
         // 统一密码
-        userPassword: 'testpass123',
+        userPassword: '123456',
         // 用户数量（与SQL中插入的用户数一致）
         userCount: parseInt(__ENV.USER_COUNT || '500'),
     },

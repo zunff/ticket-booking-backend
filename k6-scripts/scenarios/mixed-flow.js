@@ -2,40 +2,36 @@
  * 混合场景压测脚本
  * 测试目标：模拟真实用户行为流程，测试系统综合性能
  *
- * 用户行为流程：
- * 1. 登录系统
- * 2. 浏览演唱会列表
- * 3. 查看演唱会详情
- * 4. 尝试抢票
- * 5. 查看订单状态
+ * 使用方法：
+ *   ./sh/pre-login.sh 500 http://192.168.249.231:9000
+ *   k6 run k6-scripts/scenarios/mixed-flow.js --vus 100 --duration 3m \
+ *     -e BASE_URL=http://192.168.249.231:9000 -e CONCERT_ID=2 -e GRADE_ID=6
  */
 
-import http from 'k6';
+import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { config, endpoints, getApiUrl } from '../config.js';
-import { login, getAuthHeaders, getTestUser } from '../lib/auth.js';
+import { getAuthHeaders } from '../lib/auth.js';
+import { getAuth } from '../lib/token-cache.js';
 import { randomInt, randomChoice } from '../lib/helpers.js';
 
 // 压测配置
 export const options = {
-    scenarios: {
-        // 混合场景：模拟真实用户行为
-        realistic_flow: {
-            executor: 'ramping-vus',
-            stages: [
-                { duration: '1m', target: 50 },
-                { duration: '3m', target: 200 },
-                { duration: '2m', target: 500 },
-                { duration: '1m', target: 200 },
-                { duration: '30s', target: 0 },
-            ],
-            gracefulRampDown: '30s',
-        },
-    },
+    stages: [
+        { duration: '30s', target: 10 },   // 预热阶段：逐步增加到 10 VU
+        { duration: '1m', target: 50 },    // 第一阶段：增加到 50 VU
+        { duration: '2m', target: 100 },   // 第二阶段：增加到 100 VU
+        { duration: '1m', target: 50 },    // 下降阶段
+        { duration: '30s', target: 0 },    // 结束阶段
+    ],
     thresholds: {
         http_req_duration: ['p(95)<1000', 'p(99)<2000'],
         http_req_failed: ['rate<0.2'],
     },
+    // 连接超时和请求超时设置
+    noConnectionReuse: false,
+    // 设置每个连接的最大请求数，避免长连接问题
+    maxRedirects: 0,
 };
 
 // 测试数据
@@ -68,15 +64,21 @@ function selectBehavior() {
     return 'browse_list';
 }
 
+// HTTP 请求通用配置
+const HTTP_PARAMS = {
+    timeout: '30s',
+    throw: false,  // 不抛出异常，让 check 处理
+};
+
 /**
  * 浏览演唱会列表
  */
 function browseConcertList() {
     const current = randomInt(1, 3);
     const size = randomInt(10, 20);
-    const url = `${getApiUrl(endpoints.concerts)}?current=${current}&size=${size}`;
+    const url = getApiUrl(endpoints.concerts) + '?current=' + current + '&size=' + size;
 
-    const response = http.get(url);
+    const response = http.get(url, HTTP_PARAMS);
 
     check(response, {
         '浏览列表成功': (r) => r.status === 200,
@@ -91,6 +93,7 @@ function browseConcertList() {
 function viewConcertDetail(auth, concertId) {
     const url = getApiUrl(endpoints.concertDetail(concertId));
     const params = {
+        ...HTTP_PARAMS,
         headers: getAuthHeaders(auth.token),
     };
 
@@ -115,6 +118,7 @@ function tryBooking(auth, concertId, gradeId) {
     });
 
     const params = {
+        ...HTTP_PARAMS,
         headers: getAuthHeaders(auth.token),
     };
 
@@ -124,23 +128,16 @@ function tryBooking(auth, concertId, gradeId) {
         '抢票请求发送': (r) => r.status === 200 || r.status === 429,
     });
 
-    if (response.status === 200) {
-        const body = JSON.parse(response.body);
-        if (body.code === 200) {
-            return body.data;
-        }
-    }
-
     sleep(randomInt(1, 3));
-    return null;
 }
 
 /**
  * 查看订单状态
  */
 function checkOrderStatus(auth) {
-    const url = `${getApiUrl(endpoints.userOrders(auth.userId))}?current=1&size=10`;
+    const url = getApiUrl(endpoints.userOrders(auth.userId)) + '?current=1&size=10';
     const params = {
+        ...HTTP_PARAMS,
         headers: getAuthHeaders(auth.token),
     };
 
@@ -160,9 +157,13 @@ export default function () {
     const vuId = __VU;
     const iteration = __ITER;
 
-    // 获取测试用户并登录
-    const user = getTestUser(vuId, iteration);
-    const auth = login(user.username, user.password);
+    // 首次迭代添加随机延迟，错开启动避免瞬间压垮服务器
+    if (iteration === 0) {
+        sleep(Math.random() * 3);
+    }
+
+    // 获取认证信息
+    const auth = getAuth(vuId, iteration);
 
     if (!auth) {
         sleep(1);
@@ -189,11 +190,4 @@ export default function () {
             checkOrderStatus(auth);
             break;
     }
-}
-
-/**
- * 清理函数
- */
-export function teardown() {
-    console.log('混合场景压测完成');
 }

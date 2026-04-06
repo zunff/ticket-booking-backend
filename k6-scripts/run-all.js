@@ -7,7 +7,7 @@
  *   k6 run --env BASE_URL=http://your-server:9000 run-all.js
  */
 
-import http from 'k6';
+import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { config, endpoints, getApiUrl } from './config.js';
 import { login, getAuthHeaders, getTestUser } from './lib/auth.js';
@@ -250,4 +250,13 @@ export function teardown() {
     console.log('\n========================================');
     console.log('   票务系统综合压测 - 完成');
     console.log('========================================\n');
+}
+
+/**
+ * 默认函数 - 支持 CLI 参数覆盖时的简单压测
+ * 当使用 --vus --duration 等 CLI 参数时会调用此函数
+ */
+export default function () {
+    // 默认执行混合流程测试
+    mixedTest();
 }

@@ -3,16 +3,17 @@
  */
 
 import http from 'k6/http';
-import { check } from 'k6';
+import { check, sleep } from 'k6';
 import { config, endpoints, getApiUrl, generateUsername } from '../config.js';
 
 /**
- * 用户登录获取JWT Token
+ * 用户登录获取JWT Token（带重试）
  * @param {string} username - 用户名
  * @param {string} password - 密码
+ * @param {number} maxRetries - 最大重试次数
  * @returns {object|null} 包含token和userId的对象，失败返回null
  */
-export function login(username, password) {
+export function login(username, password, maxRetries = 3) {
     const url = getApiUrl(endpoints.login);
     const payload = JSON.stringify({
         username: username,
@@ -23,9 +24,27 @@ export function login(username, password) {
         headers: {
             'Content-Type': 'application/json',
         },
+        timeout: '10s',
     };
 
-    const response = http.post(url, payload, params);
+    let response;
+    let retryCount = 0;
+
+    while (retryCount < maxRetries) {
+        response = http.post(url, payload, params);
+
+        // 检查是否是连接错误，需要重试
+        if (response.error_code && response.error_code !== 0) {
+            retryCount++;
+            if (retryCount < maxRetries) {
+                sleep(0.5 * retryCount);
+                continue;
+            }
+            return null;
+        }
+
+        break;
+    }
 
     const success = check(response, {
         'login successful': (r) => r.status === 200,

@@ -4,6 +4,7 @@ import com.ticketbooking.common.constant.JwtConstants;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -25,6 +26,13 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     @Value("${jwt.secret:ticket-booking-jwt-secret-key-for-demo-purpose-only}")
     private String jwtSecret;
     
+    private SecretKey secretKey;
+    
+    @PostConstruct
+    public void init() {
+        this.secretKey = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
+    }
+    
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
@@ -44,9 +52,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         String token = authHeader.substring(JwtConstants.TOKEN_PREFIX.length());
         
         try {
-            SecretKey key = Keys.hmacShaKeyFor(jwtSecret.getBytes(StandardCharsets.UTF_8));
             Claims claims = Jwts.parser()
-                    .verifyWith(key)
+                    .verifyWith(secretKey)
                     .build()
                     .parseSignedClaims(token)
                     .getPayload();
