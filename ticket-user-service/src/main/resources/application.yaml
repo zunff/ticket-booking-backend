@@ -36,3 +36,7 @@ management:
 feign:
   sentinel:
     enabled: true
+
+multi-level-cache:
+  user:
+    enabled: true

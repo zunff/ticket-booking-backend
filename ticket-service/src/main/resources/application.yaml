@@ -38,3 +38,7 @@ logging:
 feign:
   sentinel:
     enabled: true
+
+multi-level-cache:
+  concert:
+    enabled: true

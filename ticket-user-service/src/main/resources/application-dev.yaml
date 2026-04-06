@@ -35,7 +35,3 @@ logging:
 
 jwt:
   secret: ticket-booking-jwt-secret-key-for-demo-purpose-only
-
-multi-level-cache:
-  user:
-    enabled: true
