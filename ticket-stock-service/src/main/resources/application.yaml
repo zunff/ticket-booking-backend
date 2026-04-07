@@ -32,8 +32,15 @@ management:
       application: ${spring.application.name}
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{traceId:-}] [%thread] %-5level %logger{36} - %msg%n"
   level:
     com.ticketbooking: INFO
+
+slow-log:
+  enabled: true
+  threshold-ms: 1000
+  log-params: true
 
 feign:
   sentinel:
