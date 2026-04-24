@@ -2,6 +2,8 @@
 
 基于 Spring Boot 3.2 + Java 21 虚拟线程 + Redis + Kafka + Nacos 的微服务架构高并发抢票系统。
 
+> 前端仓库：https://github.com/zunff/ticket-booking-frontend
+
 ## 项目架构
 
 ```
