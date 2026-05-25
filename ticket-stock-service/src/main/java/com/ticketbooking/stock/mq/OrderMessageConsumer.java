@@ -98,6 +98,8 @@ public class OrderMessageConsumer {
 
                 // 超出限购，回滚 Redis 并创建失败订单
                 rollbackRedis(message);
+                // 回填 userPurchaseKey 为 DB 真实值，让后续 Lua 请求能直接拦截
+                backfillUserPurchaseKey(message.getUserId(), message.getConcertId(), purchasedCount);
                 createFailedOrder(message, "超出限购数量，您已购买 " + purchasedCount + " 张，限购 " + purchaseLimit + " 张");
                 acknowledgment.acknowledge();
                 return;
@@ -122,6 +124,8 @@ public class OrderMessageConsumer {
                 // 扣减成功，更新订单状态为已支付
                 log.info("Stock decremented successfully: orderNo={}", orderNo);
                 updateOrderToPaid(message);
+                // 回填 userPurchaseKey 为 DB 真实总数（含本次），修正 Lua 层可能的不准确计数
+                backfillUserPurchaseKey(message.getUserId(), message.getConcertId(), purchasedCount + message.getQuantity());
             }
 
             acknowledgment.acknowledge();
@@ -213,6 +217,20 @@ public class OrderMessageConsumer {
         } catch (Exception e) {
             log.error("Failed to rollback Redis: orderNo={}", message.getOrderNo(), e);
             // Redis 回滚失败不影响主流程，由定时任务同步
+        }
+    }
+
+    /**
+     * 回填用户购买数量到 Redis
+     * 当 DB 查到的真实数量与 Redis 不一致时，以 DB 为准修正 Redis
+     */
+    private void backfillUserPurchaseKey(Long userId, Long concertId, int totalCount) {
+        try {
+            String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(concertId, userId);
+            redisUtils.setEx(userPurchaseKey, String.valueOf(totalCount), RedisExpireConstants.USER_PURCHASE_SECONDS);
+            log.info("Backfilled userPurchaseKey: userId={}, concertId={}, count={}", userId, concertId, totalCount);
+        } catch (Exception e) {
+            log.error("Failed to backfill userPurchaseKey: userId={}, concertId={}", userId, concertId, e);
         }
     }
 

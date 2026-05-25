@@ -16,6 +16,12 @@ public final class RedisExpireConstants {
      */
     public static final long PREHEAT_CACHE_HOURS = 24;
 
+    /**
+     * 预热缓存默认过期时间（秒）：24 小时
+     * 当 endSaleTime 为空时使用此默认值
+     */
+    public static final long PREHEAT_CACHE_SECONDS = PREHEAT_CACHE_HOURS * 3600;
+
 
     // ==================== 用户购买记录 ====================
 
@@ -34,15 +40,6 @@ public final class RedisExpireConstants {
      * 说明：防止 Kafka 消息重复消费
      */
     public static final long CONSUME_IDEMPOTENT_HOURS = 24;
-
-    // ==================== 兜底缓存 ====================
-
-    /**
-     * 兜底缓存过期时间：1.5 小时
-     * 用于：预热数据过期后的兜底同步
-     * 说明：比预热缓存短，确保兜底数据不会长期存在
-     */
-    public static final long FALLBACK_CACHE_SECONDS = 5400L; // 3600 + 1800
 
     // ==================== 缓存穿透防护 ====================
 

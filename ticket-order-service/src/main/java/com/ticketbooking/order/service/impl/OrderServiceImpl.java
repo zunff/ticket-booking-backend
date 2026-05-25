@@ -68,11 +68,6 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     @Override
     public String createOrder(Long userId, Long concertId, Long gradeId, Integer quantity) {
-        // 使用 Hash 结构的库存 Key
-        String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
-        String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(concertId, userId);
-        String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
-
         log.info("Creating order: userId={}, concertId={}, gradeId={}, quantity={}",
                 userId, concertId, gradeId, quantity);
 
@@ -81,17 +76,10 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             throw new BusinessException(ErrorCode.TICKET_NOT_FOUND);
         }
 
-        log.info("Ticket info loaded: concertId={}, gradeId={}, price={}, stock={}", concertId, gradeId, ticketInfo.getPrice(), ticketInfo.getAvailableStock());
+        log.info("Ticket info loaded: concertId={}, gradeId={}, price={}, stock={}",
+                concertId, gradeId, ticketInfo.getPrice(), ticketInfo.getAvailableStock());
 
-        DefaultRedisScript<Long> script = bookingLuaScript.getBookingScript();
-        // KEYS: stockHashKey, userPurchaseKey, limitKey
-        List<String> keys = Arrays.asList(stockHashKey, userPurchaseKey, limitKey);
-        // ARGV: userId, quantity, gradeId, expireSeconds
-        Long result = redisUtils.executeLuaScript(script, keys,
-                String.valueOf(userId), String.valueOf(quantity), String.valueOf(gradeId),
-                String.valueOf(RedisExpireConstants.USER_PURCHASE_SECONDS));
-
-        log.info("Lua script result: {} ({})", result, BookingLuaScript.getResultDesc(result));
+        Long result = executeBookingWithRetry(userId, concertId, gradeId, quantity);
 
         if (result == null) {
             throw new BusinessException(ErrorCode.SYSTEM_BUSY);
@@ -105,6 +93,75 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
             case 1 -> processOrderAsync(userId, concertId, gradeId, quantity, ticketInfo);
             default -> throw new BusinessException(ErrorCode.SYSTEM_BUSY);
         };
+    }
+
+    /**
+     * 执行抢票 Lua 脚本，key 缺失时从 DB 回填后重试一次
+     */
+    private Long executeBookingWithRetry(Long userId, Long concertId, Long gradeId, Integer quantity) {
+        DefaultRedisScript<Long> script = bookingLuaScript.getBookingScript();
+        List<String> keys = Arrays.asList(
+                RedisKeyConstants.buildTicketStockHashKey(concertId),
+                RedisKeyConstants.buildUserConcertPurchaseKey(concertId, userId),
+                RedisKeyConstants.buildConcertLimitKey(concertId)
+        );
+        String[] args = {
+                String.valueOf(userId), String.valueOf(quantity),
+                String.valueOf(gradeId), String.valueOf(RedisExpireConstants.USER_PURCHASE_SECONDS)
+        };
+
+        Long result = redisUtils.executeLuaScript(script, keys, args);
+        log.info("Lua script result: {} ({})", result, BookingLuaScript.getResultDesc(result));
+
+        if (result == -2 || result == -4) {
+            log.info("Lua indicates missing keys (result={}), recovering: concertId={}, gradeId={}", result, concertId, gradeId);
+            result = recoverBookingKeys(concertId, gradeId, script, keys, args);
+        }
+
+        return result;
+    }
+
+    /**
+     * 恢复缺失的 booking key，加锁防止缓存击穿
+     * 拿到锁的请求从 DB 回填并重试 Lua，拿不到锁的直接返回原始错误码
+     */
+    private Long recoverBookingKeys(Long concertId, Long gradeId, DefaultRedisScript<Long> script, List<String> keys, String[] args) {
+        String lockKey = RedisKeyConstants.buildTicketLockKey(concertId, gradeId);
+        RLock lock = redissonClient.getLock(lockKey);
+
+        try {
+            boolean acquired = lock.tryLock(1, 5, TimeUnit.SECONDS);
+            if (!acquired) {
+                log.warn("Recovery lock not acquired, returning original error: concertId={}, gradeId={}", concertId, gradeId);
+                return (long) -2;
+            }
+
+            try {
+                // double-check：拿到锁后重新执行一次 Lua，可能其他请求已经回填了
+                Long retryResult = redisUtils.executeLuaScript(script, keys, args);
+                if (retryResult != null && retryResult == 1) {
+                    log.info("Keys already recovered by another request: concertId={}, gradeId={}", concertId, gradeId);
+                    return retryResult;
+                }
+
+                // 确认仍需回填，从 DB 加载
+                StockDTO stock = stockServiceClient.getStock(concertId, gradeId);
+                if (stock != null) {
+                    syncTicketDataToRedis(concertId, gradeId, stock);
+                    retryResult = redisUtils.executeLuaScript(script, keys, args);
+                    log.info("Lua retry after recovery: {} ({})", retryResult, BookingLuaScript.getResultDesc(retryResult));
+                    return retryResult;
+                }
+            } finally {
+                lock.unlock();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("Recovery lock interrupted: concertId={}, gradeId={}", concertId, gradeId, e);
+        } catch (Exception e) {
+            log.error("Failed to recover booking keys: concertId={}, gradeId={}", concertId, gradeId, e);
+        }
+        return (long) -2;
     }
 
     private TicketInfoDTO getTicketInfoWithLock(Long concertId, Long gradeId) {
@@ -177,27 +234,27 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
     /**
      * 同步票务数据到 Redis（库存和限购数量）
-     * 库存使用 Hash 结构写入
+     * 只写 field 值，不覆盖已有 key 的 TTL（TTL 由预热统一管理）
+     * 仅在 key 不存在时（预热未执行）设置默认 TTL
      */
     private void syncTicketDataToRedis(Long concertId, Long gradeId, StockDTO stock) {
-        // 使用兜底缓存过期时间（比预热缓存短）
-        long expireSeconds = RedisExpireConstants.FALLBACK_CACHE_SECONDS;
-
-        // 写入库存 Hash
+        // 写入库存 Hash field
         String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
+        Boolean hashExists = redisUtils.hasKey(stockHashKey);
         redisUtils.hSet(stockHashKey, String.valueOf(gradeId), String.valueOf(stock.getAvailableStock()));
-        // 为整个 Hash 设置过期时间（如果 key 存在）
-        if (Boolean.TRUE.equals(redisUtils.hasKey(stockHashKey))) {
-            redisUtils.expire(stockHashKey, expireSeconds, TimeUnit.SECONDS);
+        if (!Boolean.TRUE.equals(hashExists)) {
+            redisUtils.expire(stockHashKey, RedisExpireConstants.PREHEAT_CACHE_SECONDS, TimeUnit.SECONDS);
         }
 
-        // 写入限购 key
+        // 写入限购 key：已存在不覆盖
         String limitKey = RedisKeyConstants.buildConcertLimitKey(concertId);
-        int purchaseLimit = stock.getPurchaseLimit() != null ? stock.getPurchaseLimit() : 1;
-        redisUtils.setEx(limitKey, String.valueOf(purchaseLimit), expireSeconds);
+        if (!Boolean.TRUE.equals(redisUtils.hasKey(limitKey))) {
+            int purchaseLimit = stock.getPurchaseLimit() != null ? stock.getPurchaseLimit() : 1;
+            redisUtils.setEx(limitKey, String.valueOf(purchaseLimit), RedisExpireConstants.PREHEAT_CACHE_SECONDS);
+        }
 
-        log.info("Synced ticket data to Redis: concertId={}, gradeId={}, stock={}, limit={}",
-                concertId, gradeId, stock.getAvailableStock(), purchaseLimit);
+        log.info("Synced ticket data to Redis: concertId={}, gradeId={}, stock={}, hashExisted={}",
+                concertId, gradeId, stock.getAvailableStock(), hashExists);
     }
 
     private void saveTicketInfoToCache(String cacheKey, TicketInfoDTO ticketInfo) {
