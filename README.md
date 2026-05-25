@@ -179,16 +179,7 @@ L1 (Caffeine) → L2 (Redis) → DB
 
 **文件**: `ticket-booking-common/.../cache/MultiLevelCacheService.java`
 
-### 4. 网关 Sticky Session (一致性哈希)
-
-```
-已登录用户 → 一致性哈希 + 虚拟节点 → 固定实例（本地缓存命中）
-未登录用户 → RoundRobin 轮询
-```
-
-**文件**: `ticket-gateway-service/.../config/UserIdStickyLoadBalancer.java`
-
-### 5. Java 21 虚拟线程
+### 4. Java 21 虚拟线程
 
 ```yaml
 spring:

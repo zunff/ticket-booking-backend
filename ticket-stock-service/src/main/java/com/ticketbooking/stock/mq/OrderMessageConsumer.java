@@ -1,17 +1,13 @@
 package com.ticketbooking.stock.mq;
 
-import com.alibaba.csp.sentinel.Entry;
-import com.alibaba.csp.sentinel.EntryType;
-import com.alibaba.csp.sentinel.SphU;
-import com.alibaba.csp.sentinel.slots.block.BlockException;
 import com.ticketbooking.common.constant.RedisExpireConstants;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.exception.BusinessException;
-import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.model.dto.OrderDTO;
 import com.ticketbooking.common.model.qo.CreateOrderQO;
+import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.stock.client.OrderServiceClient;
 import com.ticketbooking.stock.config.KafkaTopicConfig;
@@ -42,11 +38,6 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class OrderMessageConsumer {
 
-    /**
-     * Sentinel 资源名称
-     */
-    public static final String CONSUMER_RESOURCE = "kafka-consumer:ticket-order-topic";
-
     private final OrderServiceClient orderServiceClient;
     private final StockService stockService;
     private final RedisUtils redisUtils;
@@ -55,22 +46,6 @@ public class OrderMessageConsumer {
     public void processOrder(@Payload TicketOrderMessage message, @Header(KafkaHeaders.RECEIVED_KEY) String key, Acknowledgment acknowledgment) {
         String orderNo = message.getOrderNo();
         log.info("Processing order message: {}", orderNo);
-
-        // Sentinel 限流保护
-        Entry entry = null;
-        try {
-            entry = SphU.entry(CONSUMER_RESOURCE, 0, EntryType.IN);
-        } catch (BlockException e) {
-            // 限流/熔断：不 ack，让消息稍后重试
-            log.warn("Consumer rate limited: orderNo={}, blockType={}", orderNo, e.getClass().getSimpleName());
-            // 短暂延迟后让 Kafka 重新投递
-            try {
-                TimeUnit.MILLISECONDS.sleep(100);
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-            }
-            return;
-        }
 
         try {
             // 1. 幂等检查
@@ -144,11 +119,6 @@ public class OrderMessageConsumer {
             log.error("System error processing order: orderNo={}", orderNo, e);
             deleteConsumeLock(orderNo);
             acknowledgment.nack(Duration.ofSeconds(1));
-        } finally {
-            // 退出 Sentinel entry
-            if (entry != null) {
-                entry.exit();
-            }
         }
     }
 
