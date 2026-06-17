@@ -40,7 +40,15 @@ public enum ErrorCode {
     TOKEN_EXPIRED(5002, "Token已过期"),
     NO_PERMISSION(5003, "无权限访问"),
 
-    OPERATION_NOT_ALLOWED(6001, "操作不允许");
+    OPERATION_NOT_ALLOWED(6001, "操作不允许"),
+
+    PAYMENT_NOT_FOUND(7001, "支付记录不存在"),
+    PAYMENT_ALREADY_PAID(7002, "支付单已支付"),
+    PAYMENT_CLOSED(7003, "支付单已关闭"),
+    PAYMENT_CHANNEL_NOT_SUPPORTED(7004, "不支持的支付渠道"),
+    PAYMENT_AMOUNT_MISMATCH(7005, "支付金额不匹配"),
+    PAYMENT_FAILED(7006, "支付失败"),
+    PAYMENT_CAPABILITY_NOT_SUPPORTED(7007, "该渠道不支持此操作");
     
     private final int code;
     private final String message;

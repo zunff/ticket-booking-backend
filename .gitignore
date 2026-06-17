@@ -9,8 +9,7 @@ docs/
 
 .agents
 .claude
-CLAUDE.md
-AGENTS.md
+.codegraph
 
 ticket-*/src/main/resources/application-test.yaml
 k6-scripts/.token-cache.json

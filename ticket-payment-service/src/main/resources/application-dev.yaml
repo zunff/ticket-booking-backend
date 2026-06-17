@@ -1,0 +1,74 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: localhost:8848
+        namespace: dev
+        group: ticket-booking
+      config:
+        enabled: false
+    sentinel:
+      transport:
+        dashboard: localhost:8858
+        port: 8720
+      eager: true
+      web-context-unify: false
+  datasource:
+    url: jdbc:mysql://localhost:3306/ticket_payment?useSSL=false&serverTimezone=Asia/Shanghai&characterEncoding=UTF-8&allowPublicKeyRetrieval=true
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 3
+      idle-timeout: 30000
+      connection-timeout: 30000
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 3000
+      lettuce:
+        pool:
+          max-active: 20
+          max-idle: 10
+          min-idle: 5
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: payment-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        spring.json.trusted.packages: "*"
+
+logging:
+  level:
+    com.ticketbooking: INFO
+
+# 支付渠道配置
+# - wechat/alipay 默认关闭：未填真实商户凭证时不要开启（开启后会构造 SDK 客户端，凭证不全会启动失败）
+# - mock 默认开启：本地联调使用 channel=MOCK
+# 有沙箱/真实凭证时设 enabled: true 并填入对应字段即可
+payment:
+  mock:
+    enabled: true
+  channels:
+    wechat:
+      enabled: false
+      app-id: ${WECHAT_APP_ID:}
+      mch-id: ${WECHAT_MCH_ID:}
+      api-v3-key: ${WECHAT_API_V3_KEY:}
+      private-key-path: ${WECHAT_PRIVATE_KEY_PATH:}
+      cert-serial-no: ${WECHAT_CERT_SERIAL_NO:}
+      notify-url: ${WECHAT_NOTIFY_URL:http://localhost:8085/payment/notify/wechat}
+    alipay:
+      enabled: false
+      app-id: ${ALIPAY_APP_ID:}
+      private-key: ${ALIPAY_PRIVATE_KEY:}
+      alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+      gateway-url: ${ALIPAY_GATEWAY_URL:https://openapi-sandbox.alipaydev.com/gateway.do}
+      notify-url: ${ALIPAY_NOTIFY_URL:http://localhost:8085/payment/notify/alipay}
+      return-url: ${ALIPAY_RETURN_URL:http://localhost:8085}

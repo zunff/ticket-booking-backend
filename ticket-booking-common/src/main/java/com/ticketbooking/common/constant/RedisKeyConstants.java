@@ -80,6 +80,14 @@ public final class RedisKeyConstants {
      */
     public static final String KAFKA_FALLBACK_STREAM_KEY = "kafka:fallback:order-stream";
 
+    // ==================== 分布式锁 ====================
+
+    /**
+     * 支付下单分布式锁前缀
+     * Key: payment:prepay:lock:{outTradeNo}
+     */
+    public static final String PAYMENT_PREPAY_LOCK_KEY = "payment:prepay:lock:";
+
     public static String buildConsumeIdempotentKey(String orderNo) {
         return CONSUME_IDEMPOTENT_KEY + orderNo;
     }
@@ -96,5 +104,12 @@ public final class RedisKeyConstants {
      */
     public static String buildTicketGradeKey(Long concertId) {
         return TICKET_GRADE_KEY + concertId;
+    }
+
+    /**
+     * 支付下单分布式锁 Key
+     */
+    public static String buildPaymentPrepayLockKey(String outTradeNo) {
+        return PAYMENT_PREPAY_LOCK_KEY + outTradeNo;
     }
 }

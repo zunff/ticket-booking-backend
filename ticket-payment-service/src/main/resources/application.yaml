@@ -1,0 +1,47 @@
+server:
+  port: 8085
+  servlet:
+    context-path: /payment
+
+spring:
+  application:
+    name: ticket-payment-service
+  threads:
+    virtual:
+      enabled: true
+  web:
+    resources:
+      add-mappings: true
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%X{traceId:-}] [%thread] %-5level %logger{36} - %msg%n"
+  level:
+    com.ticketbooking: INFO
+
+slow-log:
+  enabled: true
+  threshold-ms: 1000
+  log-params: true
+
+feign:
+  sentinel:
+    enabled: true

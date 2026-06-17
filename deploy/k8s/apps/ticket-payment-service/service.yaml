@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ticket-payment-service
+  namespace: ticket-booking
+  labels:
+    app: ticket-payment-service
+spec:
+  ports:
+  - port: 8085
+    name: http
+    targetPort: 8085
+  selector:
+    app: ticket-payment-service

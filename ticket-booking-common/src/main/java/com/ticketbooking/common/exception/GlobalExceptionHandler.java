@@ -25,6 +25,20 @@ public class GlobalExceptionHandler {
         return Result.error(e.getCode(), e.getMessage());
     }
 
+    @ExceptionHandler(UnauthorizedException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<Void> handleUnauthorizedException(UnauthorizedException e) {
+        log.warn("Unauthorized: {}", e.getMessage());
+        return Result.error(e.getCode(), e.getMessage());
+    }
+
+    @ExceptionHandler(ForbiddenException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Result<Void> handleForbiddenException(ForbiddenException e) {
+        log.warn("Forbidden: {}", e.getMessage());
+        return Result.error(e.getCode(), e.getMessage());
+    }
+
     /**
      * 处理 Feign 调用结果异常
      * 当远程服务返回非成功状态码时由 FeignResultDecoder 抛出

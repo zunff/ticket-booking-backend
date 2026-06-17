@@ -17,6 +17,7 @@
         <module>ticket-service</module>
         <module>ticket-order-service</module>
         <module>ticket-stock-service</module>
+        <module>ticket-payment-service</module>
         <module>ticket-gateway-service</module>
     </modules>
     
@@ -28,6 +29,8 @@
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <mysql.version>8.0.33</mysql.version>
         <knife4j.version>4.5.0</knife4j.version>
+        <wechatpay-java.version>0.2.17</wechatpay-java.version>
+        <alipay-sdk.version>4.39.79.ALL</alipay-sdk.version>
     </properties>
     
     <dependencyManagement>
@@ -106,6 +109,18 @@
                 <groupId>com.github.xiaoymin</groupId>
                 <artifactId>knife4j-openapi3-jakarta-spring-boot-starter</artifactId>
                 <version>4.5.0</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.github.wechatpay-apiv3</groupId>
+                <artifactId>wechatpay-java</artifactId>
+                <version>${wechatpay-java.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.alipay.sdk</groupId>
+                <artifactId>alipay-sdk-java</artifactId>
+                <version>${alipay-sdk.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
