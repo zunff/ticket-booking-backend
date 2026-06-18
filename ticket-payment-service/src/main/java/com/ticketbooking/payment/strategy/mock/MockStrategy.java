@@ -31,8 +31,12 @@ import java.time.LocalDateTime;
 public class MockStrategy extends AbstractPayChannelStrategy
         implements QueryCapable, CloseCapable, RefundCapable {
 
-    public MockStrategy(PaymentRecordService recordService, RedissonClient redissonClient) {
+    private final MockProperties mockProperties;
+
+    public MockStrategy(MockProperties mockProperties,
+                        PaymentRecordService recordService, RedissonClient redissonClient) {
         super(recordService, redissonClient);
+        this.mockProperties = mockProperties;
     }
 
     @Override
@@ -50,13 +54,23 @@ public class MockStrategy extends AbstractPayChannelStrategy
         PayMode payMode = inferPayMode(request);
         String channelTradeNo = "MOCK_" + request.getOutTradeNo();
         String payUrl = (payMode == PayMode.MOCK_PAGE_CONFIRM)
-                ? "/mock/cashier/" + request.getOutTradeNo()
+                ? buildCashierUrl(request.getOutTradeNo())
                 : null;
         return PayResponseDTO.builder()
                 .channelTradeNo(channelTradeNo)
                 .payMode(payMode)
                 .payUrl(payUrl)
                 .build();
+    }
+
+    private String buildCashierUrl(String outTradeNo) {
+        String base = mockProperties.getCashierBaseUrl();
+        if (base == null || base.isBlank()) {
+            base = "";
+        }
+        // 去掉末尾斜杠，避免拼接出双斜杠
+        base = base.endsWith("/") ? base.substring(0, base.length() - 1) : base;
+        return base + "/mock/cashier/" + outTradeNo;
     }
 
     @Override

@@ -53,6 +53,7 @@ logging:
 payment:
   mock:
     enabled: false
+    cashier-base-url: ${PAYMENT_CASHIER_BASE_URL:https://api.example.com/api/payment}
   channels:
     wechat:
       enabled: true

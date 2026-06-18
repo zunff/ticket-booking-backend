@@ -55,6 +55,7 @@ logging:
 payment:
   mock:
     enabled: true
+    cashier-base-url: http://localhost:9000/api/payment
   channels:
     wechat:
       enabled: false

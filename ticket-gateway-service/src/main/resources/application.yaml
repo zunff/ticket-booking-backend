@@ -41,6 +41,13 @@ spring:
           filters:
             - StripPrefix=1
 
+        - id: ticket-payment-service
+          uri: lb://ticket-payment-service
+          predicates:
+            - Path=/api/payment/**
+          filters:
+            - StripPrefix=1
+
 
 management:
   endpoints:

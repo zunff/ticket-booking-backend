@@ -147,6 +147,8 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
                path.startsWith("/api/users/login") ||
                path.startsWith("/api/users/register") ||
                path.startsWith("/api/ticket") && !path.contains("/book") ||
+               path.startsWith("/api/payment/mock/") ||   // Mock 收银台页面：浏览器直访，无 JWT
+               path.startsWith("/api/payment/notify/") ||  // 支付平台异步回调 webhook：不带 JWT
                path.startsWith("/api/health") ||
                path.endsWith("/v3/api-docs") ||
                path.endsWith("/swagger-resources") ||
