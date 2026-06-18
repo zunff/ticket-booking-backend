@@ -1,14 +1,13 @@
 package com.ticketbooking.payment.strategy.alipay;
 
+import cn.hutool.json.JSONUtil;
 import com.alipay.api.AlipayApiException;
 import com.alipay.api.AlipayClient;
 import com.alipay.api.internal.util.AlipaySignature;
 import com.alipay.api.request.AlipayTradeCloseRequest;
-import com.alipay.api.request.AlipayTradePagePayRequest;
 import com.alipay.api.request.AlipayTradeQueryRequest;
 import com.alipay.api.request.AlipayTradeRefundRequest;
 import com.alipay.api.response.AlipayTradeCloseResponse;
-import com.alipay.api.response.AlipayTradePagePayResponse;
 import com.alipay.api.response.AlipayTradeQueryResponse;
 import com.alipay.api.response.AlipayTradeRefundResponse;
 import com.ticketbooking.common.enums.ErrorCode;
@@ -24,11 +23,7 @@ import com.ticketbooking.payment.model.dto.TradeQueryDTO;
 import com.ticketbooking.payment.model.qo.PayRequestQO;
 import com.ticketbooking.payment.model.qo.RefundRequestQO;
 import com.ticketbooking.payment.service.PaymentRecordService;
-import com.ticketbooking.payment.strategy.AbstractPayChannelStrategy;
-import com.ticketbooking.payment.strategy.CloseCapable;
-import com.ticketbooking.payment.strategy.QueryCapable;
-import com.ticketbooking.payment.strategy.RefundCapable;
-import cn.hutool.json.JSONUtil;
+import com.ticketbooking.payment.strategy.*;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonClient;
@@ -42,10 +37,10 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 支付宝策略 — 电脑网站支付（page.pay）。
+ * 支付宝策略 — 支持 WEB / WAP。
  * <p>
- * 实现：基接口 + QueryCapable + CloseCapable + RefundCapable。
- * 仅当 {@code payment.channels.alipay.enabled=true} 时装配。
+ * prepay 路由到 {@link PayModeHandlerFactory}，各支付方式由独立 Handler Bean 实现。
+ * 本类负责通知验签/解析 + query/close/refund 能力。
  * <p>
  * 金额单位：我方与微信都是分，支付宝是元字符串（两位小数），边界处转换。
  */
@@ -55,18 +50,19 @@ import java.util.Map;
 public class AlipayStrategy extends AbstractPayChannelStrategy
         implements QueryCapable, CloseCapable, RefundCapable {
 
-    private static final String PRODUCT_CODE = "FAST_INSTANT_TRADE_PAY";
-
     private final AlipayProperties properties;
     private final AlipayClient alipayClient;
+    private final PayModeHandlerFactory modeHandlerFactory;
 
     public AlipayStrategy(AlipayProperties properties,
                           AlipayClient alipayClient,
+                          PayModeHandlerFactory modeHandlerFactory,
                           PaymentRecordService recordService,
                           RedissonClient redissonClient) {
         super(recordService, redissonClient);
         this.properties = properties;
         this.alipayClient = alipayClient;
+        this.modeHandlerFactory = modeHandlerFactory;
     }
 
     @Override
@@ -83,49 +79,25 @@ public class AlipayStrategy extends AbstractPayChannelStrategy
 
     @Override
     protected PayResponseDTO doPrepay(PayRequestQO request) {
-        PayMode payMode = inferPayMode(request);
-        if (payMode != PayMode.ALIPAY_WEB) {
-            throw new BusinessException(ErrorCode.PAYMENT_CAPABILITY_NOT_SUPPORTED, "支付宝当前仅支持电脑网站支付");
-        }
-
-        Map<String, Object> biz = new HashMap<>();
-        biz.put("out_trade_no", request.getOutTradeNo());
-        biz.put("total_amount", fenToYuan(request.getAmount()));
-        biz.put("subject", request.getSubject());
-        biz.put("product_code", PRODUCT_CODE);
-
-        AlipayTradePagePayRequest payRequest = new AlipayTradePagePayRequest();
-        payRequest.setNotifyUrl(properties.getNotifyUrl());
-        payRequest.setReturnUrl(properties.getReturnUrl());
-        payRequest.setBizContent(toJson(biz));
-
-        try {
-            AlipayTradePagePayResponse response = alipayClient.pageExecute(payRequest);
-            log.info("Alipay prepay success: outTradeNo={}", request.getOutTradeNo());
-            // response.getBody() 是完整的自动提交表单 HTML，前端直接 document.write 即可跳转
-            return PayResponseDTO.builder()
-                    .payMode(payMode)
-                    .payUrl(response.getBody())
-                    .build();
-        } catch (AlipayApiException e) {
-            log.error("Alipay prepay failed: outTradeNo={}", request.getOutTradeNo(), e);
-            throw new SystemException(ErrorCode.PAYMENT_FAILED, "支付宝下单失败: " + e.getErrMsg());
-        }
-    }
-
-    @Override
-    protected boolean verifySignature(HttpServletRequest request) {
-        Map<String, String> params = extractParams(request);
-        try {
-            return AlipaySignature.rsaCheckV1(params, properties.getAlipayPublicKey(), "UTF-8", properties.getSignType());
-        } catch (AlipayApiException e) {
-            log.warn("Alipay notify signature verification failed: {}", e.getMessage());
-            return false;
-        }
+        return modeHandlerFactory.get(channel(), inferPayMode(request)).prepay(request);
     }
 
     @Override
     protected NotifyResultDTO doParseNotify(HttpServletRequest request) {
+        // 1. 验签
+        Map<String, String> params = extractParams(request);
+        try {
+            boolean valid = AlipaySignature.rsaCheckV1(params, properties.getAlipayPublicKey(), "UTF-8", properties.getSignType());
+            if (!valid) {
+                log.warn("Alipay notify signature verification failed");
+                throw new BusinessException(ErrorCode.PAYMENT_FAILED, "通知验签失败");
+            }
+        } catch (AlipayApiException e) {
+            log.warn("Alipay notify signature verification failed: {}", e.getMessage());
+            throw new BusinessException(ErrorCode.PAYMENT_FAILED, "通知验签失败");
+        }
+
+        // 2. 解析
         String outTradeNo = request.getParameter("out_trade_no");
         String tradeNo = request.getParameter("trade_no");
         String totalAmount = request.getParameter("total_amount");
@@ -271,7 +243,6 @@ public class AlipayStrategy extends AbstractPayChannelStrategy
         return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
     }
 
-    /** 支付宝异步通知里 gmt_payment 形如 "2024-01-01 12:00:00" */
     private LocalDateTime parseDateStr(String dateStr) {
         if (dateStr == null || dateStr.isBlank()) {
             return null;

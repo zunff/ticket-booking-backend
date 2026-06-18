@@ -77,11 +77,6 @@ public class MockStrategy extends AbstractPayChannelStrategy
     }
 
     @Override
-    protected boolean verifySignature(HttpServletRequest request) {
-        return true;
-    }
-
-    @Override
     protected NotifyResultDTO doParseNotify(HttpServletRequest request) {
         throw new BusinessException(ErrorCode.PAYMENT_CAPABILITY_NOT_SUPPORTED, "Mock渠道不支持HTTP通知回调，请使用收银台页面操作");
     }

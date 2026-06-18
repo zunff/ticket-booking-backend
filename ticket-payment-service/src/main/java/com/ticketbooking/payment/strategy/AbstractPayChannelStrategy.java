@@ -123,18 +123,11 @@ public abstract class AbstractPayChannelStrategy implements PayChannelStrategy {
 
     @Override
     public final NotifyResultDTO parseNotify(HttpServletRequest httpRequest) {
-        // 1. 验签
-        boolean valid = verifySignature(httpRequest);
-        if (!valid) {
-            log.warn("Notify signature verification failed: channel={}", channel());
-            throw new BusinessException(ErrorCode.PAYMENT_FAILED, "通知验签失败");
-        }
-
-        // 2. 解析通知内容
+        // 验签 + 解析（子类内部完成验签，失败直接抛 BusinessException）
         NotifyResultDTO result = doParseNotify(httpRequest);
 
         if (result.isSuccess()) {
-            // 3. 更新本地记录
+            // 更新本地记录
             recordService.updateOnNotifySuccess(result.getOutTradeNo(), result.getPaidAmount(), result.getChannelTradeNo(), result.getPayTime());
             log.info("Notify success: outTradeNo={}, channelTradeNo={}", result.getOutTradeNo(), result.getChannelTradeNo());
         } else {
@@ -146,12 +139,10 @@ public abstract class AbstractPayChannelStrategy implements PayChannelStrategy {
     }
 
     /**
-     * 子类实现：验证通知签名
-     */
-    protected abstract boolean verifySignature(HttpServletRequest request);
-
-    /**
-     * 子类实现：解析通知内容
+     * 子类实现：验签 + 解析通知内容。
+     * <p>
+     * 验签是渠道内部实现细节，子类自行决定如何验签（如微信的一步 parse、支付宝的 rsaCheckV1）。
+     * 验签失败直接抛 {@link BusinessException}，由模板上层统一处理。
      */
     protected abstract NotifyResultDTO doParseNotify(HttpServletRequest request);
 
