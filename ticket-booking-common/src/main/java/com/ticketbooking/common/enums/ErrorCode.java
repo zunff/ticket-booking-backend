@@ -30,6 +30,8 @@ public enum ErrorCode {
     ORDER_ALREADY_CANCELLED(3004, "订单已取消"),
     STOCK_NOT_ENOUGH(3005, "库存不足"),
     STOCK_ROLLBACK_FAILED(3006, "库存回滚失败"),
+    ORDER_NOT_PAYABLE(3007, "订单不可支付"),
+    ORDER_STATUS_NOT_ALLOWED(3008, "订单状态不允许此操作"),
     
     ALREADY_BOUGHT(4001, "您已经购买过该票，不能重复购买"),
     SYSTEM_BUSY(4002, "系统繁忙，请稍后重试"),

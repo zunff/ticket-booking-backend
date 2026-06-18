@@ -2,6 +2,8 @@ package com.ticketbooking.common.model.dto;
 
 import lombok.Data;
 
+import java.time.LocalDateTime;
+
 /**
  * 订单DTO - 跨服务共用
  */
@@ -19,4 +21,6 @@ public class OrderDTO {
      * 失败原因（当 status=FAILED 时显示）
      */
     private String failReason;
+    private String payChannel;
+    private LocalDateTime payTime;
 }

@@ -1,4 +1,4 @@
-package com.ticketbooking.payment.model.dto;
+package com.ticketbooking.common.model.dto;
 
 import lombok.Builder;
 import lombok.Data;

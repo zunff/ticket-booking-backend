@@ -40,11 +40,20 @@ public class InternalOrderController {
     }
 
     /**
-     * 标记订单已支付
+     * 标记订单已支付（支付成功回调）
      */
     @PutMapping("/{orderNo}/paid")
     public Result<Void> markOrderPaid(@PathVariable String orderNo) {
         orderService.markOrderPaid(orderNo);
+        return Result.success();
+    }
+
+    /**
+     * 标记订单待支付（库存扣减完成，等待用户付款）
+     */
+    @PutMapping("/{orderNo}/pending")
+    public Result<Void> markOrderPending(@PathVariable String orderNo) {
+        orderService.markOrderPending(orderNo);
         return Result.success();
     }
 

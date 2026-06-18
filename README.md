@@ -8,11 +8,12 @@
 
 ```
 ticket-booking-backend/
-├── ticket-booking-common/          # 公共模块（缓存、工具、注解）
+├── ticket-booking-common/          # 公共模块（缓存、工具、注解、跨服务DTO）
 ├── ticket-user-service/            # 用户服务 (端口: 8081)
 ├── ticket-service/                 # 演唱会服务 (端口: 8080)
 ├── ticket-order-service/           # 订单服务 (端口: 8082)
 ├── ticket-stock-service/           # 库存服务 (端口: 8083)
+├── ticket-payment-service/         # 支付服务 (端口: 8085)
 ├── ticket-gateway-service/         # 网关服务 (端口: 9000)
 ├── init-db/                        # 数据库初始化脚本
 ├── k6-scripts/                     # 性能压测脚本
@@ -38,11 +39,12 @@ ticket-booking-backend/
 
 | 服务 | 端口 | 数据库 | 职责 |
 |------|------|--------|------|
-| ticket-gateway-service | 9000 | - | API 网关、JWT 鉴权、Sticky Session 路由 |
+| ticket-gateway-service | 9000 | - | API 网关、JWT 鉴权、路由 |
 | ticket-user-service | 8081 | ticket_user | 用户管理、登录认证 |
 | ticket-service | 8080 | ticket_concert | 演唱会管理、票价档位、缓存预热 |
-| ticket-order-service | 8082 | ticket_order | 订单创建、抢票入口 |
-| ticket-stock-service | 8083 | ticket_stock | 库存管理、Kafka 消费、DB 库存扣减 |
+| ticket-order-service | 8082 | ticket_order | 订单创建、抢票入口、发起支付 |
+| ticket-stock-service | 8083 | ticket_stock | 库存管理、Kafka 消费、DB 库存扣减/恢复 |
+| ticket-payment-service | 8085 | ticket_payment | 支付（策略 + 能力接口，微信/支付宝/Mock） |
 
 ## 技术栈
 
@@ -59,24 +61,32 @@ ticket-booking-backend/
 | 消息队列 | Kafka | 7.5.0 |
 | 数据库 | MySQL | 8.0 |
 | 定时任务 | XXL-Job | 2.4.0 |
+| 微信支付 | wechatpay-java | 0.2.17 |
+| 支付宝 | alipay-sdk-java | 4.39.79.ALL |
 
-## 核心流程：Lua + Kafka + DB 最终一致性
+## 核心流程：Lua + Kafka + DB 最终一致性 + 支付
 
 ```plaintext
-抢票流程架构
-├─ 客户端请求
+抢票 → 支付流程架构
+├─ 客户端请求 (/book)
 ├─ Redis Lua 原子操作
 │  ├─ 检查用户限购（Hash 结构）
 │  ├─ 检查库存是否充足
 │  ├─ 原子扣减库存（HINCRBY）
 │  └─ 返回预抢票结果
 ├─ Kafka 消息队列
-│  ├─ 异步创建订单
-│  └─ 异步扣减DB库存
-└─ MySQL 数据库
-   ├─ 乐观锁扣减
-   └─ 消费失败回滚 Redis
+│  ├─ 异步创建订单 (PROCESSING)
+│  └─ 异步扣减 DB 库存 → 订单进入待支付 (PENDING)
+├─ 发起支付 (POST /order/{orderNo}/pay)
+│  └─ Order 服务校验 → 调 Payment 服务 prepay → 返回支付链接/二维码
+├─ 支付回调（支付平台 webhook / Mock 收银台）
+│  └─ Payment 验签解析 → 更新支付记录 + 通知订单置为已支付 (PAID)
+└─ 超时关单 (XxlJob orderTimeoutClose)
+   ├─ 查询支付状态：已成功 → 对账修复为 PAID
+   └─ 未支付 → 关闭支付 + 回滚 DB/Redis 库存 + 置 CANCELLED
 ```
+
+订单状态机：`PROCESSING(0) → PENDING(1) → PAID(2)` / `→ CANCELLED(3)` / `→ FAILED(4)`
 
 ---
 
@@ -132,6 +142,7 @@ docker compose -f  deploy/dev/docker-compose.dev.yaml down
 | 演唱会服务 | http://localhost:8080/ticket/v3/api-docs |
 | 订单服务 | http://localhost:8082/order/v3/api-docs |
 | 库存服务 | http://localhost:8083/stock/v3/api-docs |
+| 支付服务 | http://localhost:8085/payment/v3/api-docs |
 
 ---
 
@@ -162,6 +173,8 @@ return 1
 - **库存真正不足**：不回滚 Redis，标记订单失败
 - **限购校验失败**：回滚 Redis（HINCRBY 恢复库存、减少用户购买计数）
 
+扣减成功后订单进入 `PENDING(1 待支付)`（而非直接 PAID），等待用户发起支付。
+
 **文件**: `ticket-stock-service/.../mq/OrderMessageConsumer.java`
 
 ### 3. 多级缓存 (Caffeine + Redis)
@@ -179,7 +192,41 @@ L1 (Caffeine) → L2 (Redis) → DB
 
 **文件**: `ticket-booking-common/.../cache/MultiLevelCacheService.java`
 
-### 4. Java 21 虚拟线程
+### 4. 支付模块（策略 + 能力接口）
+
+支付模块以**基策略接口 + 窄能力接口**为核心抽象，不同支付平台支持的操作集合不同，避免胖接口强制每个渠道实现全部方法。
+
+```
+PayChannelStrategy              基接口：channel() / prepay() / parseNotify() / buildAckResponse()
+ ├─ QueryCapable                extends 基接口：query()
+ ├─ CloseCapable                extends 基接口：close()
+ └─ RefundCapable               extends 基接口：refund()
+AbstractPayChannelStrategy     模板方法（final prepay/parseNotify）：幂等、分布式锁、本地记录、状态流转
+ ├─ WechatPayStrategy           V3，支持 Native/JSAPI/H5（各 payMode 一个 Handler Bean，自注册工厂）
+ ├─ AlipayStrategy              支持 WEB/WAP
+ └─ MockStrategy                收银台页面确认 / 快速成功 / 快速失败（压测用）
+PayChannelFactory               自注册 Map<PayChannel, Strategy>
+PayModeHandlerFactory           二级 Map<PayChannel, Map<PayMode, Handler>>，各支付方式独立 Bean
+```
+
+- **支付方式独立 Bean**：每种 payMode（如 `wechat_native`、`alipay_web`、`mock_quick_success`）是一个自注册 Handler，避免 if-else 路由。
+- **Mock 快速模式**：`MOCK_QUICK_SUCCESS/FAIL` 在 prepay 阶段通过 `finalizeAfterPrepay` 钩子同步到达终态，不经页面/通知，供压测使用。
+- **通知模板合并**：`verifySignature` + `doParseNotify` 合并为单一 `doParseNotify` 钩子（验签是渠道内部细节：微信一步 parse、支付宝 rsaCheckV1）。
+
+**支付与订单集成**：
+- 订单服务代理发起支付：`POST /order/{orderNo}/pay` → Feign 调 `PaymentService.prepay`
+- 支付成功统一汇聚到 `PaymentRecordServiceImpl.updateOnNotifySuccess`，尽力通知订单 `markOrderPaid`；失败由超时对账 Job 兜底
+- 超时关单 Job（`orderTimeoutClose`）扫描 PENDING>30min 订单，查支付状态：SUCCESS 对账修复为 PAID，否则关单 + 回滚库存
+- 退款：`POST /order/{orderNo}/refund` → `PaymentService.refund` → 回滚 DB/Redis 库存 + 置 CANCELLED
+
+**关键文件**：
+- `ticket-payment-service/.../strategy/PayChannelStrategy.java` - 基接口
+- `ticket-payment-service/.../strategy/AbstractPayChannelStrategy.java` - 模板方法
+- `ticket-payment-service/.../strategy/PayModeHandlerFactory.java` - payMode 自注册工厂
+- `ticket-payment-service/.../controller/InternalPaymentController.java` - 服务间支付接口
+- `ticket-order-service/.../job/OrderTimeoutCloseJob.java` - 超时关单 + 对账
+
+### 5. Java 21 虚拟线程
 
 ```yaml
 spring:
@@ -327,6 +374,7 @@ docker build -t ticket-booking/ticket-user-service:1.0.0 ./ticket-user-service
 docker build -t ticket-booking/ticket-service:1.0.0 ./ticket-service
 docker build -t ticket-booking/ticket-order-service:1.0.0 ./ticket-order-service
 docker build -t ticket-booking/ticket-stock-service:1.0.0 ./ticket-stock-service
+docker build -t ticket-booking/ticket-payment-service:1.0.0 ./ticket-payment-service
 docker build -t ticket-booking/ticket-gateway-service:1.0.0 ./ticket-gateway-service
 
 # 2. 部署基础资源
@@ -350,6 +398,7 @@ kubectl apply -f deploy/k8s/apps/ticket-user-service/
 kubectl apply -f deploy/k8s/apps/ticket-service/
 kubectl apply -f deploy/k8s/apps/ticket-order-service/
 kubectl apply -f deploy/k8s/apps/ticket-stock-service/
+kubectl apply -f deploy/k8s/apps/ticket-payment-service/
 kubectl apply -f deploy/k8s/apps/ticket-gateway-service/
 
 # 6. 部署 Ingress 和 HPA

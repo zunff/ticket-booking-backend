@@ -5,10 +5,12 @@ import com.ticketbooking.common.model.PageResult;
 import com.ticketbooking.common.model.dto.ConcertSalesDTO;
 import com.ticketbooking.common.model.dto.DashboardStatsDTO;
 import com.ticketbooking.common.model.dto.OrderDTO;
+import com.ticketbooking.common.model.dto.PayResponseDTO;
 import com.ticketbooking.common.model.dto.SalesDataDTO;
 import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
 import com.ticketbooking.order.entity.Order;
+import com.ticketbooking.order.model.qo.InitiatePayQO;
 import com.ticketbooking.order.model.vo.OrderVO;
 
 import java.util.List;
@@ -33,10 +35,36 @@ public interface OrderService extends IService<Order> {
     void markOrderFailed(String orderNo, String failReason);
 
     /**
-     * 标记订单已支付
+     * 标记订单已支付（库存已扣减，等待用户付款）
+     * @param orderNo 订单号
+     */
+    void markOrderPending(String orderNo);
+
+    /**
+     * 标记订单已支付（支付成功回调）
      * @param orderNo 订单号
      */
     void markOrderPaid(String orderNo);
+
+    /**
+     * 标记订单已取消（超时/退款）
+     */
+    void markOrderCancelled(String orderNo, String reason);
+
+    /**
+     * 发起支付：校验订单可支付后调 payment 模块 prepay
+     */
+    PayResponseDTO initiatePayment(Long userId, String orderNo, InitiatePayQO qo);
+
+    /**
+     * 取消订单并退款（管理员）
+     */
+    void cancelAndRefund(String orderNo);
+
+    /**
+     * 查询超时未支付的 PENDING 订单（超时关单 Job 使用）
+     */
+    List<Order> findStalePendingOrders(java.time.LocalDateTime before, int limit);
 
     /**
      * 分页查询订单（管理员）

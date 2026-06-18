@@ -2,8 +2,8 @@ package com.ticketbooking.payment.strategy.wechat;
 
 import com.ticketbooking.common.enums.PayChannel;
 import com.ticketbooking.common.enums.PayMode;
-import com.ticketbooking.payment.model.dto.PayResponseDTO;
-import com.ticketbooking.payment.model.qo.PayRequestQO;
+import com.ticketbooking.common.model.dto.PayResponseDTO;
+import com.ticketbooking.common.model.qo.PayRequestQO;
 import com.ticketbooking.payment.strategy.PayModeHandler;
 import com.wechat.pay.java.service.payments.nativepay.NativePayService;
 import com.wechat.pay.java.service.payments.nativepay.model.Amount;

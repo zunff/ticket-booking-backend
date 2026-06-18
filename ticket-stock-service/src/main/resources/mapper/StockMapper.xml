@@ -13,4 +13,15 @@
           AND available_stock &gt;= #{quantity}
           AND version = #{version}
     </update>
+
+    <!-- 乐观锁恢复库存，原子操作 -->
+    <update id="incrementStock">
+        UPDATE stock
+        SET available_stock = available_stock + #{quantity},
+            version = version + 1,
+            updated_at = NOW()
+        WHERE concert_id = #{concertId}
+          AND grade_id = #{gradeId}
+          AND version = #{version}
+    </update>
 </mapper>

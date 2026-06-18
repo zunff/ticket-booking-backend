@@ -1,6 +1,6 @@
 package com.ticketbooking.payment.strategy;
 
-import com.ticketbooking.payment.model.dto.TradeQueryDTO;
+import com.ticketbooking.common.model.dto.TradeQueryDTO;
 
 /**
  * 可查询订单能力。继承基接口 {@link PayChannelStrategy}。

@@ -2,8 +2,8 @@ package com.ticketbooking.payment.strategy;
 
 import com.ticketbooking.common.enums.PayChannel;
 import com.ticketbooking.payment.model.dto.NotifyResultDTO;
-import com.ticketbooking.payment.model.qo.PayRequestQO;
-import com.ticketbooking.payment.model.dto.PayResponseDTO;
+import com.ticketbooking.common.model.qo.PayRequestQO;
+import com.ticketbooking.common.model.dto.PayResponseDTO;
 import jakarta.servlet.http.HttpServletRequest;
 
 /**

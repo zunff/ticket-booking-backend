@@ -15,4 +15,12 @@ public interface StockMapper extends BaseMapper<Stock> {
                        @Param("gradeId") Long gradeId,
                        @Param("quantity") Integer quantity,
                        @Param("version") Integer version);
+
+    /**
+     * 乐观锁恢复库存（订单取消/退款）
+     */
+    int incrementStock(@Param("concertId") Long concertId,
+                       @Param("gradeId") Long gradeId,
+                       @Param("quantity") Integer quantity,
+                       @Param("version") Integer version);
 }

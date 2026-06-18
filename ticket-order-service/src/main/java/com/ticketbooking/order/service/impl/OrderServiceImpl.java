@@ -12,15 +12,13 @@ import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.PageResult;
-import com.ticketbooking.common.model.dto.ConcertSalesDTO;
-import com.ticketbooking.common.model.dto.DashboardStatsDTO;
-import com.ticketbooking.common.model.dto.OrderDTO;
-import com.ticketbooking.common.model.dto.SalesDataDTO;
-import com.ticketbooking.common.model.dto.StockDTO;
-import com.ticketbooking.common.model.dto.TicketGradeDTO;
+import com.ticketbooking.common.model.dto.*;
 import com.ticketbooking.common.model.qo.CreateOrderQO;
+import com.ticketbooking.common.model.qo.PayRequestQO;
+import com.ticketbooking.common.model.qo.RefundRequestQO;
 import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
+import com.ticketbooking.order.client.PaymentServiceClient;
 import com.ticketbooking.order.client.StockServiceClient;
 import com.ticketbooking.order.client.TicketServiceClient;
 import com.ticketbooking.order.config.BookingLuaScript;
@@ -28,6 +26,7 @@ import com.ticketbooking.order.converter.OrderConverter;
 import com.ticketbooking.order.entity.Order;
 import com.ticketbooking.order.mapper.OrderMapper;
 import com.ticketbooking.order.model.dto.TicketInfoDTO;
+import com.ticketbooking.order.model.qo.InitiatePayQO;
 import com.ticketbooking.order.model.vo.OrderVO;
 import com.ticketbooking.order.mq.KafkaProducerService;
 import com.ticketbooking.order.service.OrderService;
@@ -42,11 +41,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -61,6 +56,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private final RedisUtils redisUtils;
     private final RedissonClient redissonClient;
     private final StockServiceClient stockServiceClient;
+    private final PaymentServiceClient paymentServiceClient;
     private final BookingLuaScript bookingLuaScript;
     private final ObjectMapper objectMapper;
     private final OrderConverter orderConverter;
@@ -370,15 +366,128 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     @Override
+    public void markOrderPending(String orderNo) {
+        Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
+        if (order != null) {
+            order.setStatus(OrderStatus.PENDING.getCode());
+            updateById(order);
+            log.info("Order marked as pending: orderNo={}", orderNo);
+        } else {
+            log.warn("Order not found when marking pending: orderNo={}", orderNo);
+        }
+    }
+
+    @Override
     public void markOrderPaid(String orderNo) {
         Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
         if (order != null) {
+            // 幂等：已经是 PAID 就直接返回，避免重复支付回调覆盖 payTime
+            if (order.getStatus() != null && order.getStatus() == OrderStatus.PAID.getCode()) {
+                return;
+            }
             order.setStatus(OrderStatus.PAID.getCode());
+            order.setPayTime(LocalDateTime.now());
             updateById(order);
             log.info("Order marked as paid: orderNo={}", orderNo);
         } else {
             log.warn("Order not found when marking paid: orderNo={}", orderNo);
         }
+    }
+
+    @Override
+    public void markOrderCancelled(String orderNo, String reason) {
+        Order order = getOne(new LambdaQueryWrapper<Order>().eq(Order::getOrderNo, orderNo));
+        if (order == null) {
+            log.warn("Order not found when marking cancelled: orderNo={}", orderNo);
+            return;
+        }
+        order.setStatus(OrderStatus.CANCELLED.getCode());
+        order.setFailReason(reason);
+        updateById(order);
+        // 回滚 Redis 用户购买计数（取消/退款都应回退限购计数）
+        rollbackRedisUserPurchase(order);
+        log.info("Order marked as cancelled: orderNo={}, reason={}", orderNo, reason);
+    }
+
+    @Override
+    public PayResponseDTO initiatePayment(Long userId, String orderNo, InitiatePayQO qo) {
+        Order order = findByOrderNo(orderNo);
+        if (!order.getUserId().equals(userId)) {
+            throw new BusinessException(ErrorCode.FORBIDDEN);
+        }
+        if (order.getStatus() == null || order.getStatus() != OrderStatus.PENDING.getCode()) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_PAYABLE, "订单当前状态不可支付");
+        }
+        // 30 分钟支付窗口（与 PaymentRecord.expireTime 一致）
+        if (order.getCreateTime() != null
+                && order.getCreateTime().plusMinutes(30).isBefore(LocalDateTime.now())) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_PAYABLE, "订单已超时，请重新下单");
+        }
+
+        // 记录支付渠道（供超时关单 Job 查询支付状态用）
+        if (qo.getChannel() != null && !qo.getChannel().equals(order.getPayChannel())) {
+            order.setPayChannel(qo.getChannel());
+            updateById(order);
+        }
+
+        PayRequestQO payRequest = new PayRequestQO();
+        payRequest.setOutTradeNo(orderNo);
+        payRequest.setAmount(order.getTotalPrice());
+        payRequest.setSubject("订单支付");
+        payRequest.setChannel(qo.getChannel());
+        payRequest.setPayMode(qo.getPayMode());
+        payRequest.setOpenId(qo.getOpenId());
+        payRequest.setReturnUrl(qo.getReturnUrl());
+
+        return paymentServiceClient.prepay(payRequest);
+    }
+
+    @Override
+    public void cancelAndRefund(String orderNo) {
+        Order order = findByOrderNo(orderNo);
+        if (order.getStatus() == null || order.getStatus() != OrderStatus.PAID.getCode()) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_NOT_ALLOWED, "仅已支付订单可退款");
+        }
+
+        RefundRequestQO refundRequest = new RefundRequestQO();
+        refundRequest.setOutTradeNo(orderNo);
+        refundRequest.setRefundNo("RF" + orderNo);
+        refundRequest.setRefundAmount(order.getTotalPrice());
+        refundRequest.setTotalAmount(order.getTotalPrice());
+        refundRequest.setReason("管理员取消订单退款");
+        refundRequest.setChannel(order.getPayChannel());
+
+        paymentServiceClient.refund(refundRequest);
+
+        // 退款成功后回滚 DB + Redis 库存（Redis 用户购买计数由 markOrderCancelled 回滚）
+        stockServiceClient.restoreStock(order.getConcertId(), order.getGradeId(),
+                order.getQuantity(), orderNo);
+
+        markOrderCancelled(orderNo, "管理员取消订单并退款");
+    }
+
+    /**
+     * 回滚 Redis 用户购买计数（退款/取消时调用，仅当 key 存在时）
+     */
+    private void rollbackRedisUserPurchase(Order order) {
+        try {
+            String userPurchaseKey = RedisKeyConstants.buildUserConcertPurchaseKey(
+                    order.getConcertId(), order.getUserId());
+            if (Boolean.TRUE.equals(redisUtils.hasKey(userPurchaseKey))) {
+                redisUtils.decrement(userPurchaseKey, order.getQuantity());
+            }
+        } catch (Exception e) {
+            log.error("Failed to rollback Redis user purchase: orderNo={}", order.getOrderNo(), e);
+        }
+    }
+
+    @Override
+    public List<Order> findStalePendingOrders(LocalDateTime before, int limit) {
+        return list(new LambdaQueryWrapper<Order>()
+                .eq(Order::getStatus, OrderStatus.PENDING.getCode())
+                .lt(Order::getCreateTime, before)
+                .orderByAsc(Order::getCreateTime)
+                .last("LIMIT " + limit));
     }
 
     private OrderDTO convertToDTO(Order order) {

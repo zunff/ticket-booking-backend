@@ -96,9 +96,9 @@ public class OrderMessageConsumer {
                 log.warn("Stock decrement failed (sold out): orderNo={}", orderNo);
                 markOrderFailed(orderNo, ErrorCode.TICKET_SOLD_OUT.getMessage());
             } else {
-                // 扣减成功，更新订单状态为已支付
+                // 扣减成功，订单进入待支付状态，等待用户支付后由 payment 模块回调置为 PAID
                 log.info("Stock decremented successfully: orderNo={}", orderNo);
-                updateOrderToPaid(message);
+                updateOrderToPending(message);
                 // 回填 userPurchaseKey 为 DB 真实总数（含本次），修正 Lua 层可能的不准确计数
                 backfillUserPurchaseKey(message.getUserId(), message.getConcertId(), purchasedCount + message.getQuantity());
             }
@@ -259,11 +259,11 @@ public class OrderMessageConsumer {
     }
 
     /**
-     * 更新订单状态为已支付
+     * 更新订单状态为待支付（库存已扣减，等待用户付款）
      */
-    private void updateOrderToPaid(TicketOrderMessage message) {
-        orderServiceClient.markOrderPaid(message.getOrderNo());
-        log.info("Updated order to PAID: {}", message.getOrderNo());
+    private void updateOrderToPending(TicketOrderMessage message) {
+        orderServiceClient.markOrderPending(message.getOrderNo());
+        log.info("Updated order to PENDING: {}", message.getOrderNo());
     }
 
     /**

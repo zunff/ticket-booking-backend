@@ -1,4 +1,4 @@
-package com.ticketbooking.payment.model.qo;
+package com.ticketbooking.common.model.qo;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -8,28 +8,24 @@ import lombok.Data;
 import java.util.Map;
 
 @Data
-public class PayRequestQO {
+public class RefundRequestQO {
 
     @NotBlank
     private String outTradeNo;
 
+    @NotBlank
+    private String refundNo;
+
     @NotNull
     @Min(1)
-    private Integer amount;
+    private Integer refundAmount;
 
-    @NotBlank
-    private String subject;
+    private Integer totalAmount;
 
-    private String description;
+    private String reason;
 
     @NotNull
     private String channel;
-
-    private String payMode;
-
-    private String openId;
-
-    private String returnUrl;
 
     private Map<String, String> extras;
 }

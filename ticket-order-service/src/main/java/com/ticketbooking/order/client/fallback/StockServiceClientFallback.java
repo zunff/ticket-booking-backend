@@ -22,9 +22,18 @@ public class StockServiceClientFallback extends FeignFallbackFactory<StockServic
     @Override
     public StockServiceClient create(Throwable cause) {
         logFallback(cause);
-        return (concertId, gradeId) -> {
-            log.warn("[{}] 查询库存降级: concertId={}, gradeId={}", serviceName, concertId, gradeId);
-            throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+        return new StockServiceClient() {
+            @Override
+            public StockDTO getStock(Long concertId, Long gradeId) {
+                log.warn("[{}] 查询库存降级: concertId={}, gradeId={}", serviceName, concertId, gradeId);
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
+
+            @Override
+            public Void restoreStock(Long concertId, Long gradeId, Integer quantity, String orderNo) {
+                log.warn("[{}] 恢复库存降级: concertId={}, gradeId={}, quantity={}, orderNo={}", serviceName, concertId, gradeId, quantity, orderNo);
+                throw new FeignFallbackException(serviceName, ErrorCode.SERVICE_DEGRADED);
+            }
         };
     }
 }

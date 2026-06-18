@@ -5,6 +5,7 @@ import com.ticketbooking.order.client.fallback.StockServiceClientFallback;
 import com.ticketbooking.order.config.FeignClientConfig;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 @FeignClient(name = "ticket-stock-service", path = "/stock/internal",
@@ -14,4 +15,11 @@ public interface StockServiceClient {
 
     @GetMapping
     StockDTO getStock(@RequestParam Long concertId, @RequestParam Long gradeId);
+
+    /**
+     * 恢复库存（订单超时取消/退款）
+     */
+    @PostMapping("/restore")
+    Void restoreStock(@RequestParam Long concertId, @RequestParam Long gradeId,
+                      @RequestParam Integer quantity, @RequestParam String orderNo);
 }

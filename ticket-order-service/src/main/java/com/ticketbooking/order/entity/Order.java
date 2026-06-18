@@ -33,6 +33,10 @@ public class Order {
      */
     private String failReason;
 
+    private String payChannel;
+
+    private LocalDateTime payTime;
+
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;

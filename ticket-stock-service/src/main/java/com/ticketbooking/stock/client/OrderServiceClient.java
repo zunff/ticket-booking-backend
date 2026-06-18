@@ -26,10 +26,10 @@ public interface OrderServiceClient {
                          @RequestParam("reason") String reason);
 
     /**
-     * 标记订单已支付
+     * 标记订单待支付（库存已扣减，等待用户付款）
      */
-    @PutMapping("/{orderNo}/paid")
-    Void markOrderPaid(@PathVariable("orderNo") String orderNo);
+    @PutMapping("/{orderNo}/pending")
+    Void markOrderPending(@PathVariable("orderNo") String orderNo);
 
     /**
      * 检查用户是否已购买

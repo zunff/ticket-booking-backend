@@ -14,6 +14,12 @@ public interface StockService extends IService<Stock> {
 
     int decrementStock(Long concertId, Long gradeId, Integer quantity, String orderNo);
 
+    /**
+     * 恢复库存（订单取消/退款时调用）：DB 乐观锁加回 + Redis Hash 库存回补。
+     * 用户购买计数器的回滚由调用方（order 超时/退款流程）负责，本方法只管库存。
+     */
+    int restoreStock(Long concertId, Long gradeId, Integer quantity, String orderNo);
+
     Stock getStockByConcertAndGrade(Long concertId, Long gradeId);
 
     List<StockLog> getStockLogs(Long concertId, Long gradeId);

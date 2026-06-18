@@ -63,7 +63,36 @@ public class StockServiceImpl extends ServiceImpl<StockMapper, Stock> implements
 
         return updated;
     }
-    
+
+    @Override
+    @Transactional
+    public int restoreStock(Long concertId, Long gradeId, Integer quantity, String orderNo) {
+        Stock stock = getStockByConcertAndGrade(concertId, gradeId);
+        if (stock == null) {
+            log.warn("Stock not found, skip restore: concertId={}, gradeId={}", concertId, gradeId);
+            return 0;
+        }
+
+        int beforeStock = stock.getAvailableStock();
+        int updated = baseMapper.incrementStock(concertId, gradeId, quantity, stock.getVersion());
+        if (updated > 0) {
+            int afterStock = beforeStock + quantity;
+            recordStockLog(concertId, gradeId, orderNo, quantity, beforeStock, afterStock, "RESTORE", "订单取消/退款恢复库存");
+
+            // 回补 Redis 库存 Hash（仅当 field 存在时，避免误创建）
+            String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(concertId);
+            if (Boolean.TRUE.equals(redisUtils.hExists(stockHashKey, String.valueOf(gradeId)))) {
+                redisUtils.hIncrBy(stockHashKey, String.valueOf(gradeId), quantity);
+            }
+
+            log.info("Stock restored: concertId={}, gradeId={}, quantity={}, before={}, after={}",
+                    concertId, gradeId, quantity, beforeStock, afterStock);
+        } else {
+            log.warn("Stock restore version conflict: concertId={}, gradeId={}, orderNo={}", concertId, gradeId, orderNo);
+        }
+        return updated;
+    }
+
     @Override
     public Stock getStockByConcertAndGrade(Long concertId, Long gradeId) {
         return getOne(new LambdaQueryWrapper<Stock>()

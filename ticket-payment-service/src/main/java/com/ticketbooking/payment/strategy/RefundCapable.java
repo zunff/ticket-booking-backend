@@ -1,7 +1,7 @@
 package com.ticketbooking.payment.strategy;
 
-import com.ticketbooking.payment.model.qo.RefundRequestQO;
-import com.ticketbooking.payment.model.dto.RefundResultDTO;
+import com.ticketbooking.common.model.qo.RefundRequestQO;
+import com.ticketbooking.common.model.dto.RefundResultDTO;
 
 /**
  * 可退款能力。继承基接口 {@link PayChannelStrategy}。

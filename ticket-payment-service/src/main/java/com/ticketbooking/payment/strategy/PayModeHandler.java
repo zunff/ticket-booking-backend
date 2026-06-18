@@ -2,8 +2,8 @@ package com.ticketbooking.payment.strategy;
 
 import com.ticketbooking.common.enums.PayChannel;
 import com.ticketbooking.common.enums.PayMode;
-import com.ticketbooking.payment.model.dto.PayResponseDTO;
-import com.ticketbooking.payment.model.qo.PayRequestQO;
+import com.ticketbooking.common.model.dto.PayResponseDTO;
+import com.ticketbooking.common.model.qo.PayRequestQO;
 
 /**
  * 支付方式处理器 — 策略内的策略。

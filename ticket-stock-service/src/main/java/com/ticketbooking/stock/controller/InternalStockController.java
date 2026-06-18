@@ -48,4 +48,17 @@ public class InternalStockController {
         stockService.updateStock(concertId, gradeId, newStock);
         return Result.success();
     }
+
+    /**
+     * 恢复库存（订单超时取消/退款时由 order-service 调用）
+     */
+    @PostMapping("/restore")
+    public Result<Void> restoreStock(
+            @RequestParam Long concertId,
+            @RequestParam Long gradeId,
+            @RequestParam Integer quantity,
+            @RequestParam String orderNo) {
+        stockService.restoreStock(concertId, gradeId, quantity, orderNo);
+        return Result.success();
+    }
 }

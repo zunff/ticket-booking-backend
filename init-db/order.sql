@@ -12,6 +12,8 @@ CREATE TABLE IF NOT EXISTS orders (
     total_price INT NOT NULL COMMENT '总价（单位：分）',
     status TINYINT NOT NULL DEFAULT 0 COMMENT '0-处理中 1-待支付 2-已支付 3-已取消 4-失败',
     fail_reason VARCHAR(255) DEFAULT NULL COMMENT '失败原因（当status=4时记录）',
+    pay_channel VARCHAR(32) DEFAULT NULL COMMENT '支付渠道（wechatpay/alipay/mock）',
+    pay_time DATETIME DEFAULT NULL COMMENT '支付时间',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_user_id (user_id),
