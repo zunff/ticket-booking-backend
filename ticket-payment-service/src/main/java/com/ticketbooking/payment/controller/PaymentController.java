@@ -25,17 +25,17 @@ public class PaymentController {
         return Result.success(converter.toVO(paymentService.prepay(request)));
     }
 
-    @GetMapping("/query/{outTradeNo}")
-    public Result<PaymentRecordVO> query(@PathVariable String outTradeNo,
+    @GetMapping("/query/{orderNo}")
+    public Result<PaymentRecordVO> query(@PathVariable String orderNo,
                                          @RequestParam PayChannel channel) {
-        paymentService.query(outTradeNo, channel);
-        return Result.success(paymentService.getDetail(outTradeNo));
+        paymentService.query(orderNo, channel);
+        return Result.success(paymentService.getDetail(orderNo));
     }
 
-    @PostMapping("/close/{outTradeNo}")
-    public Result<Boolean> close(@PathVariable String outTradeNo,
+    @PostMapping("/close/{orderNo}")
+    public Result<Boolean> close(@PathVariable String orderNo,
                                  @RequestParam PayChannel channel) {
-        return Result.success(paymentService.close(outTradeNo, channel));
+        return Result.success(paymentService.close(orderNo, channel));
     }
 
     @PostMapping("/refund")

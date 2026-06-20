@@ -1,6 +1,8 @@
 package com.ticketbooking.payment.strategy;
 
+import cn.hutool.core.lang.TypeReference;
 import cn.hutool.core.util.StrUtil;
+import cn.hutool.json.JSONUtil;
 import com.ticketbooking.common.constant.RedisKeyConstants;
 import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.PayMode;
@@ -18,6 +20,7 @@ import org.redisson.api.RedissonClient;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -48,15 +51,16 @@ public abstract class AbstractPayChannelStrategy implements PayChannelStrategy {
 
     @Override
     public final PayResponseDTO prepay(PayRequestQO request) {
-        // 1. 幂等：已有有效记录直接返回
-        PaymentRecord existing = recordService.findByOutTradeNo(request.getOutTradeNo());
-        if (existing != null && isLiveState(existing.getStatus())) {
-            log.info("Prepay idempotent hit: outTradeNo={}, status={}", request.getOutTradeNo(), existing.getStatus());
+        // 1. 幂等：该订单已有在途流水（PENDING/PROCESSING）则直接复用，避免重复下单
+        PaymentRecord existing = recordService.findLiveByOrderNo(request.getOrderNo());
+        if (existing != null) {
+            log.info("Prepay idempotent hit: orderNo={}, outTradeNo={}, status={}",
+                    request.getOrderNo(), existing.getOutTradeNo(), existing.getStatus());
             return buildPayResponse(existing);
         }
 
-        // 2. 分布式锁
-        String lockKey = RedisKeyConstants.buildPaymentPrepayLockKey(request.getOutTradeNo());
+        // 2. 分布式锁（按订单，临界区=为该订单创建支付流水）
+        String lockKey = RedisKeyConstants.buildPaymentPrepayLockKey(request.getOrderNo());
         RLock lock = redissonClient.getLock(lockKey);
         boolean acquired;
         try {
@@ -71,19 +75,24 @@ public abstract class AbstractPayChannelStrategy implements PayChannelStrategy {
 
         try {
             // double-check after lock
-            existing = recordService.findByOutTradeNo(request.getOutTradeNo());
-            if (existing != null && isLiveState(existing.getStatus())) {
+            existing = recordService.findLiveByOrderNo(request.getOrderNo());
+            if (existing != null) {
                 return buildPayResponse(existing);
             }
 
-            // 3. 创建本地记录
+            // 3. 创建本地记录（每次下单一条新流水，out_trade_no=paymentNo 全局唯一）
             PaymentRecord record = buildPaymentRecord(request);
             recordService.save(record);
+            // 让 doPrepay / 各 Handler / finalize 读到的 outTradeNo 是本次按次唯一的渠道商户单号
+            request.setOutTradeNo(record.getOutTradeNo());
 
             // 4. 调渠道统一下单
             PayResponseDTO response = doPrepay(request);
 
-            // 5. 收尾：写渠道单号 + 置状态（默认 PROCESSING，子类可覆盖以同步到达终态）
+            // 5. 持久化支付入口信息（payUrl/payParams），保证幂等命中可回放完整信息
+            recordService.updatePayInfo(record.getOutTradeNo(), response.getPayUrl(), response.getPayParams());
+
+            // 6. 收尾：写渠道单号 + 置状态（默认 PROCESSING，子类可覆盖以同步到达终态）
             finalizeAfterPrepay(request, response);
 
             return PayResponseDTO.builder()
@@ -148,25 +157,26 @@ public abstract class AbstractPayChannelStrategy implements PayChannelStrategy {
 
     // ======================== 辅助方法 ========================
 
-    private boolean isLiveState(Integer statusCode) {
-        return statusCode != null
-                && (statusCode == PaymentStatus.PENDING.getCode()
-                || statusCode == PaymentStatus.PROCESSING.getCode()
-                || statusCode == PaymentStatus.SUCCESS.getCode());
-    }
-
     private PayResponseDTO buildPayResponse(PaymentRecord record) {
+        Map<String, String> payParams = StrUtil.isNotBlank(record.getPayParams())
+                ? JSONUtil.toBean(record.getPayParams(), new TypeReference<Map<String, String>>() {}, true)
+                : null;
         return PayResponseDTO.builder()
                 .paymentNo(record.getPaymentNo())
                 .channelTradeNo(record.getChannelTradeNo())
                 .payMode(PayMode.of(record.getPayMode()))
+                .payUrl(record.getPayUrl())
+                .payParams(payParams)
                 .build();
     }
 
     private PaymentRecord buildPaymentRecord(PayRequestQO request) {
+        String paymentNo = generatePaymentNo();
         PaymentRecord record = new PaymentRecord();
-        record.setPaymentNo(generatePaymentNo());
-        record.setOutTradeNo(request.getOutTradeNo());
+        record.setPaymentNo(paymentNo);
+        record.setOrderNo(request.getOrderNo());
+        // out_trade_no = paymentNo：每次下单唯一，作为发给渠道的商户单号（微信/支付宝要求失败后不可复用）
+        record.setOutTradeNo(paymentNo);
         record.setChannel(request.getChannel());
         record.setPayMode(inferPayMode(request).getCode());
         record.setAmount(request.getAmount());

@@ -125,3 +125,7 @@ VALUES (2, 'order-executor', '订单服务', 0, NULL, NOW());
 -- Kafka 降级消息重试任务（合并 Redis Stream + 本地队列）
 INSERT INTO `xxl_job_info` (`job_group`, `job_desc`, `add_time`, `update_time`, `author`, `schedule_type`, `schedule_conf`, `misfire_strategy`, `executor_route_strategy`, `executor_handler`, `executor_param`, `executor_block_strategy`, `executor_timeout`, `executor_fail_retry_count`, `glue_type`, `glue_source`, `glue_remark`, `glue_updatetime`, `trigger_status`)
 VALUES (2, 'Kafka降级消息重试', NOW(), NOW(), 'system', 'CRON', '0 */1 * * * ?', 'DO_NOTHING', 'FIRST', 'retryKafkaFallback', '', 'SERIAL_EXECUTION', 0, 0, 'BEAN', '', 'GLUE代码初始化', NOW(), 1);
+
+-- 订单超时关单对账任务（PENDING 超 30min：支付已成功则对账置 PAID，否则关单 + 回滚库存 + 置 CANCELLED）
+INSERT INTO `xxl_job_info` (`job_group`, `job_desc`, `add_time`, `update_time`, `author`, `schedule_type`, `schedule_conf`, `misfire_strategy`, `executor_route_strategy`, `executor_handler`, `executor_param`, `executor_block_strategy`, `executor_timeout`, `executor_fail_retry_count`, `glue_type`, `glue_source`, `glue_remark`, `glue_updatetime`, `trigger_status`)
+VALUES (2, '订单超时关单对账', NOW(), NOW(), 'system', 'CRON', '0 */1 * * * ?', 'DO_NOTHING', 'FIRST', 'orderTimeoutClose', '', 'SERIAL_EXECUTION', 0, 0, 'BEAN', '', 'GLUE代码初始化', NOW(), 1);

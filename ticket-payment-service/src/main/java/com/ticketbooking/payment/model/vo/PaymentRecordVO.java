@@ -9,6 +9,7 @@ public class PaymentRecordVO {
 
     private Long id;
     private String paymentNo;
+    private String orderNo;
     private String outTradeNo;
     private String channel;
     private String payMode;

@@ -18,12 +18,12 @@ public interface PaymentServiceClient {
     @PostMapping("/prepay")
     PayResponseDTO prepay(@RequestBody PayRequestQO request);
 
-    @GetMapping("/query/{outTradeNo}")
-    TradeQueryDTO query(@PathVariable("outTradeNo") String outTradeNo,
+    @GetMapping("/query/{orderNo}")
+    TradeQueryDTO query(@PathVariable("orderNo") String orderNo,
                         @RequestParam("channel") String channel);
 
-    @PostMapping("/close/{outTradeNo}")
-    Boolean close(@PathVariable("outTradeNo") String outTradeNo,
+    @PostMapping("/close/{orderNo}")
+    Boolean close(@PathVariable("orderNo") String orderNo,
                   @RequestParam("channel") String channel);
 
     @PostMapping("/refund")

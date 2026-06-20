@@ -6,7 +6,6 @@ import com.ticketbooking.common.enums.ErrorCode;
 import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.dto.OrderDTO;
-import com.ticketbooking.common.model.qo.CreateOrderQO;
 import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
 import com.ticketbooking.stock.client.OrderServiceClient;
@@ -55,10 +54,18 @@ public class OrderMessageConsumer {
                 return;
             }
 
-            // 2. 检查订单是否已存在
+            // 2. 幂等：订单已在 createOrder 阶段同步落库（PROCESSING），按状态判断是否已处理过
             OrderDTO existingOrder = orderServiceClient.findByOrderNo(orderNo);
-            if (existingOrder != null) {
-                log.info("Order already exists in DB: {}", orderNo);
+            if (existingOrder == null) {
+                // 不应发生（createOrder 已同步落库）。当作系统异常，删除幂等锁后稍后重试
+                log.error("Order not found in DB (expected PROCESSING): orderNo={}", orderNo);
+                deleteConsumeLock(orderNo);
+                acknowledgment.nack(Duration.ofSeconds(1));
+                return;
+            }
+            if (existingOrder.getStatus() != null
+                    && existingOrder.getStatus() != OrderStatus.PROCESSING.getCode()) {
+                log.info("Order already finalized (status={}): {}", existingOrder.getStatus(), orderNo);
                 acknowledgment.acknowledge();
                 return;
             }
@@ -71,19 +78,16 @@ public class OrderMessageConsumer {
                 log.warn("Purchase limit exceeded: userId={}, concertId={}, purchased={}, limit={}, request={}",
                          message.getUserId(), message.getConcertId(), purchasedCount, purchaseLimit, message.getQuantity());
 
-                // 超出限购，回滚 Redis 并创建失败订单
+                // 超出限购，回滚 Redis 并标记订单失败
                 rollbackRedis(message);
                 // 回填 userPurchaseKey 为 DB 真实值，让后续 Lua 请求能直接拦截
                 backfillUserPurchaseKey(message.getUserId(), message.getConcertId(), purchasedCount);
-                createFailedOrder(message, "超出限购数量，您已购买 " + purchasedCount + " 张，限购 " + purchaseLimit + " 张");
+                markOrderFailed(orderNo, "超出限购数量，您已购买 " + purchasedCount + " 张，限购 " + purchaseLimit + " 张");
                 acknowledgment.acknowledge();
                 return;
             }
 
-            // 4. 先创建处理中的订单
-            createProcessingOrder(message);
-
-            // 5. DB 乐观锁扣减库存
+            // 4. DB 乐观锁扣减库存
             int updated = stockService.decrementStock(
                     message.getConcertId(),
                     message.getGradeId(),
@@ -220,42 +224,6 @@ public class OrderMessageConsumer {
     private void deleteConsumeLock(String orderNo) {
         String idempotentKey = RedisKeyConstants.buildConsumeIdempotentKey(orderNo);
         redisUtils.delete(idempotentKey);
-    }
-
-    /**
-     * 创建处理中的订单
-     */
-    private void createProcessingOrder(TicketOrderMessage message) {
-        CreateOrderQO qo = new CreateOrderQO(
-                message.getOrderNo(),
-                message.getUserId(),
-                message.getConcertId(),
-                message.getGradeId(),
-                message.getQuantity(),
-                message.getTotalPrice(),
-                OrderStatus.PROCESSING.getCode(),
-                null
-        );
-        orderServiceClient.createOrder(qo);
-        log.info("Created processing order: {}", message.getOrderNo());
-    }
-
-    /**
-     * 创建失败订单
-     */
-    private void createFailedOrder(TicketOrderMessage message, String failReason) {
-        CreateOrderQO qo = new CreateOrderQO(
-                message.getOrderNo(),
-                message.getUserId(),
-                message.getConcertId(),
-                message.getGradeId(),
-                message.getQuantity(),
-                message.getTotalPrice(),
-                OrderStatus.FAILED.getCode(),
-                failReason
-        );
-        orderServiceClient.createOrder(qo);
-        log.info("Created failed order: orderNo={}, reason={}", message.getOrderNo(), failReason);
     }
 
     /**

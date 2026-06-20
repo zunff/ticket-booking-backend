@@ -16,6 +16,10 @@ public class PaymentRecord {
 
     private String paymentNo;
 
+    /** 业务订单号（关联 order 服务，一个 orderNo 可对应多条流水） */
+    private String orderNo;
+
+    /** 发给渠道的商户单号，每次下单唯一（取值 = paymentNo） */
     private String outTradeNo;
 
     /** 支付渠道，存 PayChannel.code (wechatpay/alipay) */
@@ -32,6 +36,12 @@ public class PaymentRecord {
     private Integer status;
 
     private String channelTradeNo;
+
+    /** 支付入口地址（code_url/h5_url/收银台地址等），幂等命中时回放给前端 */
+    private String payUrl;
+
+    /** 支付唤起参数（如 JSAPI 的 prepay_id），JSON 串 */
+    private String payParams;
 
     private String subject;
 

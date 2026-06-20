@@ -30,11 +30,11 @@ CREATE TABLE `ticket_grade` (
   KEY `idx_concert_id` (`concert_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='票价档位表';
 
-INSERT INTO ticket_concert.concerts (id,name,venue,show_time,start_sale_time,end_sale_time,status)
+INSERT INTO ticket_concert.concerts (id,name,venue,show_time,start_sale_time,end_sale_time,status,purchase_limit)
 VALUES
-    (1,CONCAT(YEAR(NOW())-1,'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW())-1,'-12-31 20:00:00'),CONCAT(YEAR(NOW())-1,'-01-01 10:00:00'),CONCAT(YEAR(NOW())-1,'-12-31 20:00:00'),1),
-    (2,CONCAT(YEAR(NOW()),'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW()),'-12-31 20:00:00'),CONCAT(YEAR(NOW()),'-01-01 10:00:00'),CONCAT(YEAR(NOW()),'-12-31 20:00:00'),1),
-    (3,CONCAT(YEAR(NOW())+1,'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW())+1,'-12-31 20:00:00'),CONCAT(YEAR(NOW())+1,'-01-01 10:00:00'),CONCAT(YEAR(NOW())+1,'-12-31 20:00:00'),1);
+    (1,CONCAT(YEAR(NOW())-1,'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW())-1,'-12-31 20:00:00'),CONCAT(YEAR(NOW())-1,'-01-01 10:00:00'),CONCAT(YEAR(NOW())-1,'-12-31 20:00:00'),1, 10),
+    (2,CONCAT(YEAR(NOW()),'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW()),'-12-31 20:00:00'),CONCAT(YEAR(NOW()),'-01-01 10:00:00'),CONCAT(YEAR(NOW()),'-12-31 20:00:00'),1, 10),
+    (3,CONCAT(YEAR(NOW())+1,'跨年演唱会'),'国家体育场',CONCAT(YEAR(NOW())+1,'-12-31 20:00:00'),CONCAT(YEAR(NOW())+1,'-01-01 10:00:00'),CONCAT(YEAR(NOW())+1,'-12-31 20:00:00'),1, 10);
 INSERT INTO ticket_grade (id, concert_id, grade_name, price, total_stock, is_selected_seat)
 VALUES
 (1, 1, 'VIP内场', 29900, 100, 0),

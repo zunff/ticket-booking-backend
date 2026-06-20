@@ -29,16 +29,16 @@ public class InternalPaymentController {
         return Result.success(paymentService.prepay(request));
     }
 
-    @GetMapping("/query/{outTradeNo}")
-    public Result<TradeQueryDTO> query(@PathVariable String outTradeNo,
+    @GetMapping("/query/{orderNo}")
+    public Result<TradeQueryDTO> query(@PathVariable String orderNo,
                                         @RequestParam String channel) {
-        return Result.success(paymentService.query(outTradeNo, toChannel(channel)));
+        return Result.success(paymentService.query(orderNo, toChannel(channel)));
     }
 
-    @PostMapping("/close/{outTradeNo}")
-    public Result<Boolean> close(@PathVariable String outTradeNo,
+    @PostMapping("/close/{orderNo}")
+    public Result<Boolean> close(@PathVariable String orderNo,
                                   @RequestParam String channel) {
-        return Result.success(paymentService.close(outTradeNo, toChannel(channel)));
+        return Result.success(paymentService.close(orderNo, toChannel(channel)));
     }
 
     @PostMapping("/refund")

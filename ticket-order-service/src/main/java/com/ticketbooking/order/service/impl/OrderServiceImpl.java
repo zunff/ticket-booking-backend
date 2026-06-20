@@ -267,6 +267,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         String orderNo = generateOrderNo();
         Integer totalPrice = ticketInfo.getPrice() * quantity;
 
+        // 先同步落库一条 PROCESSING 订单：保证下单接口返回后立即可查（支付/详情不再 404），
+        // 也为超时关单 Job 留下行（即使 Kafka 链路全断也有单可兜底）。库存语义不变——仍在 Lua 预扣成功之后。
+        createOrderFromStock(orderNo, userId, concertId, gradeId, quantity, totalPrice,
+                OrderStatus.PROCESSING.getCode(), null);
+
         TicketOrderMessage message = new TicketOrderMessage(orderNo, userId, concertId, gradeId, quantity, totalPrice);
         kafkaProducerService.sendOrderMessage(message);
 
@@ -431,7 +436,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         PayRequestQO payRequest = new PayRequestQO();
-        payRequest.setOutTradeNo(orderNo);
+        payRequest.setOrderNo(orderNo);
         payRequest.setAmount(order.getTotalPrice());
         payRequest.setSubject("订单支付");
         payRequest.setChannel(qo.getChannel());
@@ -450,7 +455,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
 
         RefundRequestQO refundRequest = new RefundRequestQO();
-        refundRequest.setOutTradeNo(orderNo);
+        refundRequest.setOrderNo(orderNo);
         refundRequest.setRefundNo("RF" + orderNo);
         refundRequest.setRefundAmount(order.getTotalPrice());
         refundRequest.setTotalAmount(order.getTotalPrice());
@@ -484,7 +489,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     @Override
     public List<Order> findStalePendingOrders(LocalDateTime before, int limit) {
         return list(new LambdaQueryWrapper<Order>()
-                .eq(Order::getStatus, OrderStatus.PENDING.getCode())
+                .in(Order::getStatus, OrderStatus.PROCESSING.getCode(), OrderStatus.PENDING.getCode())
                 .lt(Order::getCreateTime, before)
                 .orderByAsc(Order::getCreateTime)
                 .last("LIMIT " + limit));

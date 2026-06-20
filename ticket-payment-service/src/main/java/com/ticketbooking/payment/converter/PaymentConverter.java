@@ -19,6 +19,7 @@ public class PaymentConverter {
         PaymentRecordVO dto = new PaymentRecordVO();
         dto.setId(record.getId());
         dto.setPaymentNo(record.getPaymentNo());
+        dto.setOrderNo(record.getOrderNo());
         dto.setOutTradeNo(record.getOutTradeNo());
         dto.setChannel(PayChannel.of(record.getChannel()).getDesc());
         dto.setPayMode(PayMode.of(record.getPayMode()).getDesc());

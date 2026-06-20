@@ -21,9 +21,9 @@ public interface PaymentService {
 
     PayResponseDTO prepay(PayRequestQO request);
 
-    TradeQueryDTO query(String outTradeNo, PayChannel channel);
+    TradeQueryDTO query(String orderNo, PayChannel channel);
 
-    boolean close(String outTradeNo, PayChannel channel);
+    boolean close(String orderNo, PayChannel channel);
 
     RefundResultDTO refund(RefundRequestQO request);
 
@@ -31,7 +31,7 @@ public interface PaymentService {
 
     String buildNotifyAck(PayChannel channel, NotifyResultDTO result);
 
-    PaymentRecordVO getDetail(String outTradeNo);
+    PaymentRecordVO getDetail(String orderNo);
 
-    PageResult<PaymentRecordVO> getPage(Long current, Long size, String outTradeNo, PayChannel channel, Integer status);
+    PageResult<PaymentRecordVO> getPage(Long current, Long size, String orderNo, PayChannel channel, Integer status);
 }

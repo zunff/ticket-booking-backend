@@ -71,9 +71,12 @@ public class MockCashierController {
             </div>
             """;
 
+    // action 不能写成裸 "success"/"fail"：收银台页面 URL 无尾斜杠（/mock/cashier/{outTradeNo}），
+    // 相对解析会把 {outTradeNo} 段替换掉，导致 POST 飘到 /mock/cashier/success 命中 GET handler 而 405。
+    // 带上 {{TRADE_NO}} 让相对解析拼成正确的 /mock/cashier/{outTradeNo}/success。
     private static final String CONFIRM_BUTTONS = """
-            <form method="post" action="/mock/cashier/{{TRADE_NO}}/success"><button class="ok" type="submit">模拟支付成功</button></form>
-            <form method="post" action="/mock/cashier/{{TRADE_NO}}/fail"><button class="fail" type="submit">模拟支付失败</button></form>
+            <form method="post" action="{{TRADE_NO}}/success"><button class="ok" type="submit">模拟支付成功</button></form>
+            <form method="post" action="{{TRADE_NO}}/fail"><button class="fail" type="submit">模拟支付失败</button></form>
             """;
 
     private final PaymentRecordService recordService;
