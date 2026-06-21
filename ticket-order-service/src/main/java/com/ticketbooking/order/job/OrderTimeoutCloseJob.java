@@ -1,5 +1,6 @@
 package com.ticketbooking.order.job;
 
+import com.ticketbooking.common.enums.OrderStatus;
 import com.ticketbooking.common.enums.PaymentStatus;
 import com.ticketbooking.common.model.dto.TradeQueryDTO;
 import com.ticketbooking.order.client.PaymentServiceClient;
@@ -96,9 +97,15 @@ public class OrderTimeoutCloseJob {
             }
         }
 
-        // 3. 回滚 DB + Redis 库存
-        stockServiceClient.restoreStock(order.getConcertId(), order.getGradeId(),
-                order.getQuantity(), orderNo);
+        // 3. 回滚库存
+        //    PENDING：消费者已扣减 DB，回滚 DB + Redis
+        //    PROCESSING：Kafka 尚未成功消费、DB 未扣减，仅回补 Redis 预扣减（迟到的重试由消费者状态校验幂等跳过）
+        if (order.getStatus() != null && order.getStatus() == OrderStatus.PROCESSING.getCode()) {
+            orderService.rollbackRedisStockOnly(order);
+        } else {
+            stockServiceClient.restoreStock(order.getConcertId(), order.getGradeId(),
+                    order.getQuantity(), orderNo);
+        }
 
         // 4. 置 CANCELLED
         orderService.markOrderCancelled(orderNo, "支付超时自动取消");

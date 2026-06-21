@@ -487,6 +487,26 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     }
 
     @Override
+    public void rollbackRedisStockOnly(Order order) {
+        // PROCESSING 订单：Kafka 尚未成功消费、DB 未扣减，只回补 Lua 预扣减的 Redis 库存 Hash。
+        // 注意：仅当 field 存在时回补，避免 HINCRBY 误创建。
+        try {
+            String stockHashKey = RedisKeyConstants.buildTicketStockHashKey(order.getConcertId());
+            String field = String.valueOf(order.getGradeId());
+            if (Boolean.TRUE.equals(redisUtils.hExists(stockHashKey, field))) {
+                redisUtils.hIncrBy(stockHashKey, field, order.getQuantity());
+                log.info("Redis stock rolled back (PROCESSING close): concertId={}, gradeId={}, quantity={}, orderNo={}",
+                        order.getConcertId(), order.getGradeId(), order.getQuantity(), order.getOrderNo());
+            } else {
+                log.warn("stockHash field not exists, skip Redis rollback: concertId={}, gradeId={}, orderNo={}",
+                        order.getConcertId(), order.getGradeId(), order.getOrderNo());
+            }
+        } catch (Exception e) {
+            log.error("Failed to rollback Redis stock: orderNo={}", order.getOrderNo(), e);
+        }
+    }
+
+    @Override
     public List<Order> findStalePendingOrders(LocalDateTime before, int limit) {
         return list(new LambdaQueryWrapper<Order>()
                 .in(Order::getStatus, OrderStatus.PROCESSING.getCode(), OrderStatus.PENDING.getCode())

@@ -52,6 +52,11 @@ public interface OrderService extends IService<Order> {
     void markOrderCancelled(String orderNo, String reason);
 
     /**
+     * 仅回补 Redis 预扣减库存（订单仍为 PROCESSING：Kafka 未成功消费、DB 未扣减时使用）
+     */
+    void rollbackRedisStockOnly(Order order);
+
+    /**
      * 发起支付：校验订单可支付后调 payment 模块 prepay
      */
     PayResponseDTO initiatePayment(Long userId, String orderNo, InitiatePayQO qo);
