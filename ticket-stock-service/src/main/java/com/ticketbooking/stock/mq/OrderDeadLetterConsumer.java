@@ -1,7 +1,7 @@
 package com.ticketbooking.stock.mq;
 
+import com.ticketbooking.common.constant.KafkaTopicConstants;
 import com.ticketbooking.common.mq.TicketOrderMessage;
-import com.ticketbooking.stock.config.KafkaTopicConfig;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.header.Headers;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -17,7 +17,7 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class OrderDeadLetterConsumer {
 
-    @KafkaListener(topics = KafkaTopicConfig.TICKET_ORDER_DLT, groupId = "stock-dlt-group", concurrency = "3")
+    @KafkaListener(topics = KafkaTopicConstants.TICKET_ORDER_DLT, groupId = "stock-dlt-group", concurrency = "3")
     public void handleDeadLetter(
             @Payload(required = false) TicketOrderMessage message,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String originalTopic,

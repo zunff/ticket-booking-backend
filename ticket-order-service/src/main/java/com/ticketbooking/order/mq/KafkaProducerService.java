@@ -4,8 +4,8 @@ import com.alibaba.csp.sentinel.Entry;
 import com.alibaba.csp.sentinel.EntryType;
 import com.alibaba.csp.sentinel.SphU;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.ticketbooking.common.constant.KafkaTopicConstants;
 import com.ticketbooking.common.mq.TicketOrderMessage;
-import com.ticketbooking.order.config.KafkaTopicConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -50,7 +50,7 @@ public class KafkaProducerService {
 
             // 创建 ProducerRecord
             ProducerRecord<String, TicketOrderMessage> record =
-                    new ProducerRecord<>(KafkaTopicConfig.TICKET_ORDER_TOPIC, message.getOrderNo(), message);
+                    new ProducerRecord<>(KafkaTopicConstants.TICKET_ORDER_TOPIC, message.getOrderNo(), message);
 
             // 异步发送
             CompletableFuture<SendResult<String, TicketOrderMessage>> future = kafkaTemplate.send(record);
@@ -81,7 +81,7 @@ public class KafkaProducerService {
             entry = SphU.entry(RESOURCE_NAME, 0, EntryType.OUT);
 
             // 同步发送
-            kafkaTemplate.send(KafkaTopicConfig.TICKET_ORDER_TOPIC, message.getOrderNo(), message)
+            kafkaTemplate.send(KafkaTopicConstants.TICKET_ORDER_TOPIC, message.getOrderNo(), message)
                     .get(SEND_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             log.info("Sync sent order message: orderNo={}", message.getOrderNo());
             return true;

@@ -2,8 +2,8 @@ package com.ticketbooking.order.job;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.ticketbooking.common.constant.RedisKeyConstants;
+import com.ticketbooking.common.constant.KafkaTopicConstants;
 import com.ticketbooking.common.mq.TicketOrderMessage;
-import com.ticketbooking.order.config.KafkaTopicConfig;
 import com.ticketbooking.order.mq.LocalFallbackQueue;
 import com.xxl.job.core.context.XxlJobHelper;
 import com.xxl.job.core.handler.annotation.XxlJob;
@@ -166,7 +166,7 @@ public class KafkaFallbackRetryJob {
      */
     private boolean retrySendMessage(TicketOrderMessage message) {
         try {
-            kafkaTemplate.send(KafkaTopicConfig.TICKET_ORDER_TOPIC, message.getOrderNo(), message)
+            kafkaTemplate.send(KafkaTopicConstants.TICKET_ORDER_TOPIC, message.getOrderNo(), message)
                     .get(5, TimeUnit.SECONDS);
             log.info("Retry send success: orderNo={}", message.getOrderNo());
             return true;

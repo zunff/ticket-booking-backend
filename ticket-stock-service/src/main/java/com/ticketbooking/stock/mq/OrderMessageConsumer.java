@@ -8,8 +8,8 @@ import com.ticketbooking.common.exception.BusinessException;
 import com.ticketbooking.common.model.dto.OrderDTO;
 import com.ticketbooking.common.mq.TicketOrderMessage;
 import com.ticketbooking.common.utils.RedisUtils;
+import com.ticketbooking.common.constant.KafkaTopicConstants;
 import com.ticketbooking.stock.client.OrderServiceClient;
-import com.ticketbooking.stock.config.KafkaTopicConfig;
 import com.ticketbooking.stock.service.StockService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +41,16 @@ public class OrderMessageConsumer {
     private final StockService stockService;
     private final RedisUtils redisUtils;
 
-    @KafkaListener(topics = KafkaTopicConfig.TICKET_ORDER_TOPIC, groupId = "stock-group", concurrency = "5")
+    /**
+     * 消费者数 = 实例数 x concurrency
+     *
+     * 平时:Topic分区数 > 消费者数(留 buffer,省资源)
+     * 峰值:Topic分区数 ≈ 消费者数(HPA 扩到刚好打满,吞吐最大化)
+     * 绝不:Topic分区数 < 消费者数(消费者有空闲,纯浪费线程)
+     *
+     * 依赖 hpa 动态扩缩容实现实例数的变化从而控制消费者数量
+     */
+    @KafkaListener(topics = KafkaTopicConstants.TICKET_ORDER_TOPIC, groupId = "stock-group", concurrency = "5")
     public void processOrder(@Payload TicketOrderMessage message, @Header(KafkaHeaders.RECEIVED_KEY) String key, Acknowledgment acknowledgment) {
         String orderNo = message.getOrderNo();
         log.info("Processing order message: {}", orderNo);
